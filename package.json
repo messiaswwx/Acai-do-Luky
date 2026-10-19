@@ -1,0 +1,12 @@
+{
+  "name": "projeto-do-kayky-acai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema completo de Delivery e Gestão para microempresa de Açaí do Kayky",
+  "scripts": {
+    "server": "node --watch server/index.js",
+    "client": "npm run dev --prefix client",
+    "dev": "node dev.js",
+    "build": "npm run build --prefix client"
+  }
+}

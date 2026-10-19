@@ -1,0 +1,16 @@
+{
+  "name": "acai-kayky-server",
+  "version": "1.0.0",
+  "description": "Backend de pedidos e tempo real para Açaí do Kayky",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
