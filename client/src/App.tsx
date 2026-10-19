@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Heart,
   Star,
-  ShieldCheck,
   Flame,
   ShoppingBag
 } from 'lucide-react';
@@ -209,7 +208,7 @@ export default function App() {
             <img 
               src="/logo.png" 
               alt="Logo Açaí do Luky" 
-              className="w-6 h-6 rounded-full border border-amber-400 object-cover shadow-xs" 
+              className="w-8 h-8 rounded-full object-contain bg-white shadow-xs shrink-0 ring-1 ring-amber-400" 
             />
             <span className="font-extrabold text-white tracking-wide flex items-center gap-1.5">
               <span>{settings.storeName}</span>
@@ -293,18 +292,15 @@ export default function App() {
                 </div>
 
                 {/* Brand Visual Row: Logo + Headline */}
-                <div className="flex items-center gap-4 sm:gap-6 pt-1">
-                  <div className="relative shrink-0">
-                    <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full p-1 bg-gradient-to-tr from-amber-400 via-amber-300 to-white shadow-xl">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-4 sm:gap-6 pt-1">
+                  <div className="relative shrink-0 flex items-center justify-center">
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-white p-1 ring-4 ring-amber-400 shadow-2xl flex items-center justify-center overflow-hidden">
                       <img
                         src="/logo.png"
                         alt="Logo Açaí do Luky"
-                        className="w-full h-full rounded-full object-cover bg-white"
+                        className="w-full h-full rounded-full object-contain"
                       />
                     </div>
-                    <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-purple-950 shadow-md">
-                      <ShieldCheck className="w-4 h-4" />
-                    </span>
                   </div>
 
                   <div className="space-y-1">

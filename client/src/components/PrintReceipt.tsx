@@ -40,6 +40,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
         {/* Printable Ticket Area */}
         <div className="p-6 overflow-y-auto font-mono text-xs text-black leading-tight space-y-3 bg-white">
           <div className="text-center space-y-1 border-b border-dashed border-black pb-3">
+            <img src="/logo.png" alt="Logo" className="w-14 h-14 rounded-full mx-auto mb-2 object-contain" />
             <h1 className="font-bold text-base uppercase">{settings.storeName}</h1>
             <p className="text-[10px]">DELIVERY & BALCÃO</p>
             <p className="text-[10px]">WhatsApp: {settings.whatsapp}</p>
