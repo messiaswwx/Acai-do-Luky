@@ -30,7 +30,7 @@ if (!fs.existsSync(DATA_DIR)) {
 
 const DEFAULT_DATA = {
   settings: {
-    storeName: "Açaí do Kayky",
+    storeName: "Açaí do Luky",
     isOpen: true,
     whatsapp: "5511999999999",
     pixKey: "kaykyacai@exemplo.com",

@@ -46,7 +46,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLocalSettings(settings);
   }, [settings]);
 
-  // Fetch initial orders
   const loadOrders = async () => {
     try {
       const res = await fetch('/api/orders');
@@ -131,44 +130,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Header Bar for Admin */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black text-slate-900">Painel do Kayky</h1>
-            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-              settings.isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-            }`}>
-              <Power className="w-3 h-3" />
-              {settings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
-            </span>
+      <div className="bg-white rounded-3xl p-5 border border-purple-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-cover shadow-sm"
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-black text-slate-900">Painel do Luky</h1>
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                settings.isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+              }`}>
+                <Power className="w-3 h-3" />
+                {settings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">Cozinha e Gestão de Pedidos em Tempo Real</p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">Gestão de Pedidos, Cardápio e Configurações em Tempo Real</p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Sound alert switch */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
             className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
               soundEnabled
-                ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                ? 'bg-amber-50 text-purple-950 border-amber-300 hover:bg-amber-100'
                 : 'bg-slate-100 text-slate-500 border-slate-200'
             }`}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-purple-600" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-purple-700" /> : <VolumeX className="w-4 h-4" />}
             <span>Som: {soundEnabled ? 'Ligado' : 'Mudo'}</span>
           </button>
 
-          {/* Test Sound */}
           <button
             onClick={playOrderAlert}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            title="Testar som da campainha"
+            className="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-purple-200"
+            title="Testar campainha"
           >
             <Bell className="w-4 h-4" />
           </button>
 
-          {/* Refresh button */}
           <button
             onClick={loadOrders}
             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
@@ -182,12 +185,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
             <span className="text-[11px] font-semibold text-slate-500 uppercase">Faturamento</span>
-            <div className="text-lg font-black text-slate-900">{formatCurrency(totalRevenue)}</div>
+            <div className="text-lg font-black text-purple-950">{formatCurrency(totalRevenue)}</div>
           </div>
         </div>
 
@@ -201,34 +204,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+        <div className="bg-white p-4 rounded-2xl border border-amber-300 bg-amber-50/40 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-400 text-purple-950 flex items-center justify-center shrink-0 font-black">
             <Bell className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase">Novos Pedidos</span>
+            <span className="text-[11px] font-semibold text-slate-600 uppercase">Novos Pedidos</span>
             <div className="text-lg font-black text-amber-700">{pendingOrders.length}</div>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
             <ChefHat className="w-5 h-5" />
           </div>
           <div>
             <span className="text-[11px] font-semibold text-slate-500 uppercase">Em Preparo</span>
-            <div className="text-lg font-black text-indigo-700">{inPrepOrders.length}</div>
+            <div className="text-lg font-black text-purple-700">{inPrepOrders.length}</div>
           </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-2">
+      <div className="flex border-b border-purple-200 gap-2">
         <button
           onClick={() => setActiveTab('PEDIDOS')}
-          className={`pb-3 px-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'PEDIDOS'
-              ? 'border-purple-600 text-purple-900'
+              ? 'border-purple-800 text-purple-950'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -243,9 +246,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           onClick={() => setActiveTab('CARDAPIO')}
-          className={`pb-3 px-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'CARDAPIO'
-              ? 'border-purple-600 text-purple-900'
+              ? 'border-purple-800 text-purple-950'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -255,14 +258,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           onClick={() => setActiveTab('CONFIGURACOES')}
-          className={`pb-3 px-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'CONFIGURACOES'
-              ? 'border-purple-600 text-purple-900'
+              ? 'border-purple-800 text-purple-950'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Settings className="w-4 h-4" />
-          <span>Configurações da Loja</span>
+          <span>Configurações</span>
         </button>
       </div>
 
@@ -303,7 +306,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   key={order.id}
                   className={`bg-white rounded-2xl border-2 flex flex-col justify-between overflow-hidden shadow-xs transition-shadow hover:shadow-md ${
                     order.status === 'NOVO'
-                      ? 'border-amber-400 bg-amber-50/15'
+                      ? 'border-amber-400 bg-amber-50/20 shadow-md ring-2 ring-amber-400/30'
                       : order.status === 'PREPARANDO'
                       ? 'border-purple-300'
                       : order.status === 'A_CAMINHO'
@@ -326,7 +329,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         order.status === 'NOVO'
                           ? 'bg-amber-500 text-white animate-pulse'
                           : order.status === 'PREPARANDO'
-                          ? 'bg-purple-600 text-white'
+                          ? 'bg-purple-700 text-white'
                           : order.status === 'A_CAMINHO'
                           ? 'bg-blue-600 text-white'
                           : order.status === 'CONCLUIDO'
@@ -387,7 +390,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </p>
                           )}
                           {item.notes && (
-                            <p className="italic text-purple-950 font-bold bg-amber-100/60 p-1 rounded mt-1">
+                            <p className="italic text-purple-950 font-bold bg-amber-100/70 p-1 rounded mt-1">
                               Obs: {item.notes}
                             </p>
                           )}
@@ -399,7 +402,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="border-t border-slate-100 pt-2 space-y-1">
                       <div className="flex justify-between font-bold text-sm text-slate-900">
                         <span>Total:</span>
-                        <span className="text-purple-900">{formatCurrency(order.total)}</span>
+                        <span className="text-purple-950 font-black text-base">{formatCurrency(order.total)}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 flex justify-between">
                         <span>Pagamento:</span>
@@ -418,11 +421,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   {/* Actions Bar */}
                   <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
-                    {/* Status Advance Button */}
                     {order.status === 'NOVO' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'PREPARANDO')}
-                        className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                       >
                         <ChefHat className="w-4 h-4" />
                         <span>Aceitar e Iniciar Preparo</span>
@@ -432,7 +434,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {order.status === 'PREPARANDO' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'A_CAMINHO')}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                       >
                         <Bike className="w-4 h-4" />
                         <span>{order.orderType === 'ENTREGA' ? 'Despachar Entrega' : 'Pronto p/ Retirada'}</span>
@@ -442,7 +444,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {order.status === 'A_CAMINHO' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'CONCLUIDO')}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                       >
                         <CheckCircle className="w-4 h-4" />
                         <span>Finalizar Pedido</span>
@@ -450,21 +452,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
 
                     <div className="flex items-center gap-2">
-                      {/* WhatsApp contact */}
                       <a
                         href={`https://wa.me/55${order.customerPhone.replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
+                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                         <span>WhatsApp</span>
                       </a>
 
-                      {/* Print Ticket */}
                       <button
                         onClick={() => setSelectedOrderForPrint(order)}
-                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
                       >
                         <Printer className="w-3.5 h-3.5 text-slate-600" />
                         <span>Imprimir</span>
@@ -496,7 +496,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div key={size.id} className="p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <span className="font-bold text-sm block text-slate-800">{size.name}</span>
-                    <span className="text-xs text-slate-500 font-semibold">{formatCurrency(size.price)}</span>
+                    <span className="text-xs text-amber-600 font-bold">{formatCurrency(size.price)}</span>
                   </div>
                   <button
                     onClick={() => handleToggleItemAvailability('sizes', size.id)}
@@ -631,7 +631,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={localSettings.storeName}
                   onChange={e => setLocalSettings({ ...localSettings, storeName: e.target.value })}
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
 
@@ -642,7 +642,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   value={localSettings.whatsapp}
                   onChange={e => setLocalSettings({ ...localSettings, whatsapp: e.target.value })}
                   placeholder="5511999999999"
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
             </div>
@@ -654,7 +654,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={localSettings.pixKey}
                   onChange={e => setLocalSettings({ ...localSettings, pixKey: e.target.value })}
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
 
@@ -665,7 +665,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   value={localSettings.pixKeyType}
                   onChange={e => setLocalSettings({ ...localSettings, pixKeyType: e.target.value })}
                   placeholder="Ex: CPF, Telefone, E-mail"
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
             </div>
@@ -678,7 +678,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   step="0.5"
                   value={localSettings.deliveryFee}
                   onChange={e => setLocalSettings({ ...localSettings, deliveryFee: parseFloat(e.target.value) || 0 })}
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
 
@@ -689,7 +689,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   value={localSettings.estimatedTime}
                   onChange={e => setLocalSettings({ ...localSettings, estimatedTime: e.target.value })}
                   placeholder="Ex: 30 - 45 min"
-                  className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
                 />
               </div>
             </div>
@@ -700,14 +700,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 type="text"
                 value={localSettings.address}
                 onChange={e => setLocalSettings({ ...localSettings, address: e.target.value })}
-                className="w-full text-sm p-3 rounded-xl border border-slate-200"
+                className="w-full text-xs p-3 rounded-xl border border-slate-200"
               />
             </div>
 
             <button
               type="submit"
               disabled={savingSettings}
-              className="bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 px-6 rounded-xl text-sm transition-colors cursor-pointer shadow-md disabled:opacity-50"
+              className="bg-purple-800 hover:bg-purple-900 text-white font-black py-3 px-6 rounded-xl text-xs transition-colors cursor-pointer shadow-md disabled:opacity-50"
             >
               {savingSettings ? 'Salvando...' : 'Salvar Configurações'}
             </button>
@@ -715,7 +715,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Printable Receipt Modal */}
       {selectedOrderForPrint && (
         <PrintReceipt
           order={selectedOrderForPrint}

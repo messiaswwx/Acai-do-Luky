@@ -1,6 +1,6 @@
 {
   "settings": {
-    "storeName": "Açaí do Kayky",
+    "storeName": "Açaí do Luky",
     "isOpen": true,
     "whatsapp": "5511999999999",
     "pixKey": "kaykyacai@exemplo.com",
@@ -71,7 +71,7 @@
       {
         "id": "free-ninho",
         "name": "Leite Ninho em Pó",
-        "available": true
+        "available": false
       },
       {
         "id": "free-granola",

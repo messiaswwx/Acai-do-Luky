@@ -2,12 +2,22 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 antialiased font-sans;
+    @apply bg-slate-100 text-slate-800 antialiased font-sans;
     -webkit-tap-highlight-color: transparent;
   }
 }
 
-/* Custom scrollbars and styling */
+/* Custom brand colors and accents */
+:root {
+  --brand-purple-dark: #3b0d4d;
+  --brand-purple: #5b2173;
+  --brand-purple-light: #7b2c99;
+  --brand-yellow: #fcc228;
+  --brand-yellow-dark: #e5ab17;
+  --brand-green: #22c55e;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -24,11 +34,18 @@
 }
 
 @keyframes pulse-ring {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(147, 51, 234, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(147, 51, 234, 0); }
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(252, 194, 40, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(252, 194, 40, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(252, 194, 40, 0); }
 }
 
 .animate-pulse-ring {
   animation: pulse-ring 2s infinite;
+}
+
+/* Glassmorphism helpers */
+.glass-header {
+  background: rgba(91, 33, 115, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
