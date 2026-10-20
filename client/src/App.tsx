@@ -10,6 +10,8 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLogin } from './components/AdminLogin';
+import type { AdminSession } from './utils/auth';
+import { getStoredSession, clearSession } from './utils/auth';
 import { 
   Clock, 
   MapPin, 
@@ -81,10 +83,26 @@ export default function App() {
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
   const [menu, setMenu] = useState<MenuData>(INITIAL_MENU);
 
-  // Admin Auth State
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('luky_admin_auth') === 'true';
-  });
+  // Admin Auth State com tempo de expiração
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(() => getStoredSession());
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
+
+  // Monitoramento contínuo de expiração de sessão
+  useEffect(() => {
+    if (!adminSession) return;
+
+    const checkExpiration = () => {
+      if (Date.now() >= adminSession.expiresAt) {
+        clearSession();
+        setAdminSession(null);
+        setSessionExpiredNotice('Sua sessão expirou por limite de tempo. Faça login novamente para continuar.');
+      }
+    };
+
+    checkExpiration();
+    const timer = setInterval(checkExpiration, 15000);
+    return () => clearInterval(timer);
+  }, [adminSession]);
 
   // Customer State
   const [selectedSizeToBuild, setSelectedSizeToBuild] = useState<SizeItem | null>(null);
@@ -218,8 +236,9 @@ export default function App() {
   }, []);
 
   const handleAdminLogout = useCallback(() => {
-    localStorage.removeItem('luky_admin_auth');
-    setIsAdminAuthenticated(false);
+    clearSession();
+    setAdminSession(null);
+    setSessionExpiredNotice(null);
   }, []);
 
   const totalCartCount = useMemo(() => cartItems.reduce((acc, i) => acc + i.quantity, 0), [cartItems]);
@@ -641,12 +660,13 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            isAdminAuthenticated ? (
+            adminSession ? (
               <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
                 <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20">
                   <AdminPanel
                     settings={settings}
                     menu={menu}
+                    session={adminSession}
                     onUpdateSettings={handleUpdateSettings}
                     onUpdateMenu={handleUpdateMenu}
                     onLogout={handleAdminLogout}
@@ -656,7 +676,11 @@ export default function App() {
             ) : (
               <AdminLogin
                 expectedPin={settings.adminPin || '1234'}
-                onLoginSuccess={() => setIsAdminAuthenticated(true)}
+                expiredReason={sessionExpiredNotice}
+                onLoginSuccess={(newSession) => {
+                  setAdminSession(newSession);
+                  setSessionExpiredNotice(null);
+                }}
               />
             )
           }

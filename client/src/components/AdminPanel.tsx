@@ -30,6 +30,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import type { AdminSession } from '../utils/auth';
+import { formatRemainingTime, isExpiringSoon } from '../utils/auth';
 
 interface AdminPanelProps {
   settings: StoreSettings;
@@ -37,6 +39,7 @@ interface AdminPanelProps {
   onUpdateSettings: (newSettings: StoreSettings) => Promise<void>;
   onUpdateMenu: (newMenu: MenuData) => Promise<void>;
   onLogout?: () => void;
+  session?: AdminSession | null;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -44,7 +47,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   menu,
   onUpdateSettings,
   onUpdateMenu,
-  onLogout
+  onLogout,
+  session
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'CONFIGURACOES'>('PEDIDOS');
@@ -53,6 +57,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'TODOS'>('TODOS');
   const [savingSettings, setSavingSettings] = useState(false);
   const [localSettings, setLocalSettings] = useState<StoreSettings>(settings);
+
+  // Tempo de expiração de autenticação
+  const [remainingSessionText, setRemainingSessionText] = useState<string>(() => {
+    return session ? formatRemainingTime(session.expiresAt) : '';
+  });
+
+  useEffect(() => {
+    if (!session) return;
+    const updateTime = () => setRemainingSessionText(formatRemainingTime(session.expiresAt));
+    updateTime();
+    const interval = setInterval(updateTime, 15000);
+    return () => clearInterval(interval);
+  }, [session]);
 
   // Local state for full menu editing & discount management
   const [editableMenu, setEditableMenu] = useState<MenuData>(menu);
@@ -305,6 +322,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <ExternalLink className="w-3.5 h-3.5" />
             <span>Cardápio Cliente</span>
           </Link>
+
+          {session && (
+            <div
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
+                isExpiringSoon(session.expiresAt)
+                  ? 'bg-amber-100 text-amber-950 border-amber-400 animate-pulse shadow-xs'
+                  : 'bg-purple-50 text-purple-900 border-purple-200'
+              }`}
+              title={`Sessão iniciada às ${new Date(session.loggedInAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Expira às ${new Date(session.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`}
+            >
+              <Clock className="w-3.5 h-3.5 text-purple-700" />
+              <span>Sessão: {remainingSessionText}</span>
+            </div>
+          )}
 
           {onLogout && (
             <button

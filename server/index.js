@@ -104,6 +104,127 @@ function saveDatabase(data) {
 
 let db = loadDatabase();
 
+// Controle de tentativas de login e sessões ativas
+const loginAttempts = new Map(); // ip -> { count: number, lockUntil: number }
+const activeSessions = new Map(); // token -> { expiresAt: number, createdAt: number }
+
+function getClientIdentifier(req) {
+  return req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'client-default';
+}
+
+function checkBruteForce(identifier) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(identifier);
+  if (!attempt) return { allowed: true };
+  if (attempt.lockUntil && attempt.lockUntil > now) {
+    const remainingSec = Math.ceil((attempt.lockUntil - now) / 1000);
+    return { allowed: false, remainingSec };
+  }
+  if (attempt.lockUntil && attempt.lockUntil <= now) {
+    loginAttempts.delete(identifier);
+    return { allowed: true };
+  }
+  return { allowed: true };
+}
+
+function recordFailedAttempt(identifier) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(identifier) || { count: 0, lockUntil: 0 };
+  attempt.count += 1;
+  if (attempt.count >= 5) {
+    attempt.lockUntil = now + 60 * 1000; // Bloqueio temporário de 60 segundos
+  }
+  loginAttempts.set(identifier, attempt);
+  const remainingAttempts = Math.max(0, 5 - attempt.count);
+  return {
+    locked: attempt.count >= 5,
+    remainingSec: attempt.count >= 5 ? 60 : 0,
+    attemptsLeft: remainingAttempts
+  };
+}
+
+function clearFailedAttempts(identifier) {
+  loginAttempts.delete(identifier);
+}
+
+// Endpoints de Autenticação com Tempo de Sessão e Validação
+app.post('/api/auth/login', (req, res) => {
+  const clientId = getClientIdentifier(req);
+  const { pin, durationHours = 8 } = req.body || {};
+
+  // Validação de formato do PIN
+  if (!pin || typeof pin !== 'string' || pin.trim().length < 4) {
+    return res.status(400).json({ 
+      error: 'Formato inválido. O PIN deve ter no mínimo 4 dígitos numéricos.' 
+    });
+  }
+
+  // Verificação contra força bruta
+  const brute = checkBruteForce(clientId);
+  if (!brute.allowed) {
+    return res.status(429).json({
+      error: `Acesso bloqueado temporariamente por excesso de tentativas. Aguarde ${brute.remainingSec}s.`,
+      lockoutSeconds: brute.remainingSec
+    });
+  }
+
+  const expectedPin = (db.settings && db.settings.adminPin) ? String(db.settings.adminPin).trim() : '1234';
+
+  if (pin.trim() !== expectedPin) {
+    const failInfo = recordFailedAttempt(clientId);
+    if (failInfo.locked) {
+      return res.status(429).json({
+        error: 'Limite de 5 tentativas incorretas excedido. Acesso bloqueado por 60 segundos por segurança.',
+        lockoutSeconds: 60,
+        attemptsLeft: 0
+      });
+    }
+    return res.status(401).json({
+      error: `PIN incorreto. Você possui mais ${failInfo.attemptsLeft} tentativa(s) antes do bloqueio temporário.`,
+      attemptsLeft: failInfo.attemptsLeft
+    });
+  }
+
+  // PIN correto: limpa tentativas incorretas
+  clearFailedAttempts(clientId);
+
+  // Calcula validade da sessão (de 1h até 72h, padrão 8h)
+  const validDurationHours = Math.min(72, Math.max(1, Number(durationHours) || 8));
+  const loggedInAt = Date.now();
+  const expiresAt = loggedInAt + validDurationHours * 3600 * 1000;
+  const token = `adm_${loggedInAt}_${Math.random().toString(36).substring(2, 10)}`;
+
+  activeSessions.set(token, { expiresAt, createdAt: loggedInAt });
+
+  res.json({
+    success: true,
+    token,
+    loggedInAt,
+    expiresAt,
+    durationHours: validDurationHours,
+    storeName: db.settings?.storeName || 'Açaí do Luky'
+  });
+});
+
+app.post('/api/auth/verify', (req, res) => {
+  const { token } = req.body || {};
+  if (!token || !activeSessions.has(token)) {
+    return res.status(401).json({ valid: false, error: 'Sessão inválida ou inexistente' });
+  }
+
+  const session = activeSessions.get(token);
+  if (Date.now() > session.expiresAt) {
+    activeSessions.delete(token);
+    return res.status(401).json({ valid: false, error: 'Sessão expirada' });
+  }
+
+  res.json({
+    valid: true,
+    expiresAt: session.expiresAt,
+    remainingSeconds: Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
+  });
+});
+
 // Endpoints
 app.get('/api/settings', (req, res) => {
   res.json(db.settings);
