@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Order, OrderStatus, StoreSettings, MenuData } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
 import { playOrderAlert } from '../utils/audio';
+import { getRemainingHoursText } from '../utils/promo';
 import { PrintReceipt } from './PrintReceipt';
 import { 
   Bell, 
@@ -14,14 +15,16 @@ import {
   Settings, 
   SlidersHorizontal, 
   RefreshCw, 
-  MessageSquare,
-  DollarSign,
-  ShoppingBag,
-  Power,
-  Flame,
-  Percent,
-  Check,
-  Save
+  MessageSquare, 
+  DollarSign, 
+  ShoppingBag, 
+  Power, 
+  Flame, 
+  Percent, 
+  Check, 
+  Save, 
+  Clock, 
+  XCircle 
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -133,7 +136,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const price = discountPercent > 0 
           ? Number((basePrice * (1 - discountPercent / 100)).toFixed(2))
           : basePrice;
-        return { ...s, originalPrice: basePrice, discountPercent, price };
+        
+        // If discount cleared, remove expiration
+        const discountExpiresAt = discountPercent === 0 ? undefined : s.discountExpiresAt;
+        const discountHours = discountPercent === 0 ? undefined : s.discountHours;
+
+        return { ...s, originalPrice: basePrice, discountPercent, price, discountExpiresAt, discountHours };
+      });
+      return { ...prev, sizes };
+    });
+  };
+
+  // Change promo duration in hours (e.g. 24h, 48h, or null for indefinite)
+  const handleSizeDiscountDurationChange = (sizeId: string, hours: number | null) => {
+    setEditableMenu(prev => {
+      const sizes = prev.sizes.map(s => {
+        if (s.id !== sizeId) return s;
+        if (!hours || hours <= 0) {
+          return { ...s, discountHours: undefined, discountExpiresAt: undefined };
+        }
+        const expiresAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+        return { ...s, discountHours: hours, discountExpiresAt: expiresAt };
+      });
+      return { ...prev, sizes };
+    });
+  };
+
+  const handleClearDiscount = (sizeId: string) => {
+    setEditableMenu(prev => {
+      const sizes = prev.sizes.map(s => {
+        if (s.id !== sizeId) return s;
+        const basePrice = s.originalPrice ?? s.price;
+        return {
+          ...s,
+          price: basePrice,
+          originalPrice: basePrice,
+          discountPercent: 0,
+          discountHours: undefined,
+          discountExpiresAt: undefined
+        };
       });
       return { ...prev, sizes };
     });
@@ -335,7 +376,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* TAB 1: GESTÃO DE PEDIDOS */}
       {activeTab === 'PEDIDOS' && (
         <div className="space-y-4">
-          {/* Status Filter Chips */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {(['TODOS', 'NOVO', 'PREPARANDO', 'A_CAMINHO', 'CONCLUIDO', 'CANCELADO'] as const).map(st => (
               <button
@@ -377,7 +417,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       : 'border-slate-200 opacity-95'
                   }`}
                 >
-                  {/* Order Card Header */}
                   <div className="p-4 border-b border-slate-100 flex items-start justify-between bg-slate-50/70">
                     <div>
                       <div className="flex items-center gap-2">
@@ -412,7 +451,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* Customer & Address Details */}
                   <div className="p-4 space-y-3 flex-1 text-xs">
                     {order.orderType === 'ENTREGA' && order.address ? (
                       <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-0.5">
@@ -428,7 +466,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                     )}
 
-                    {/* Items Breakdown */}
                     <div className="space-y-2 border-t border-slate-100 pt-2">
                       {order.items.map((item, idx) => (
                         <div key={idx} className="bg-slate-50/70 p-2 rounded-xl border border-slate-100">
@@ -461,7 +498,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ))}
                     </div>
 
-                    {/* Total & Payment */}
                     <div className="border-t border-slate-100 pt-2 space-y-1">
                       <div className="flex justify-between font-bold text-sm text-slate-900">
                         <span>Total:</span>
@@ -482,7 +518,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* Actions Bar */}
                   <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
                     {order.status === 'NOVO' && (
                       <button
@@ -541,7 +576,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 2: CONTROLE DE PREÇOS, DESCONTOS & ESTOQUE */}
+      {/* TAB 2: CONTROLE DE PREÇOS, DESCONTOS COM HORAS & ESTOQUE */}
       {activeTab === 'CARDAPIO' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-6">
           {/* Action Header with Save Button */}
@@ -549,10 +584,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div>
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <Percent className="w-5 h-5 text-amber-500" />
-                <span>Gestão de Preços & Promoções</span>
+                <span>Gestão de Preços & Promoções por Horas</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Altere valores, aplique porcentagens de desconto e pause ingredientes esgotados em tempo real.
+                Defina descontos em porcentagem e configure a validade temporária (ex: 24h, 48h).
               </p>
             </div>
 
@@ -579,15 +614,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
           </div>
 
-          {/* 1. SIZES & PROMOTIONS */}
+          {/* 1. SIZES & PROMOTIONS WITH HOURLY DURATION */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider flex items-center gap-2">
                 <Flame className="w-4 h-4 text-amber-500" />
-                <span>Copos & Descontos Promocionais</span>
+                <span>Copos & Promoções Temporárias</span>
               </h3>
               <span className="text-xs font-semibold text-slate-500">
-                O desconto é destacado automaticamente na tela do cliente
+                O cliente visualiza o desconto e o contador de tempo restante
               </span>
             </div>
 
@@ -597,6 +632,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 const discount = size.discountPercent || 0;
                 const hasDiscount = discount > 0;
                 const savings = basePrice - size.price;
+                const remaining = size.discountExpiresAt ? getRemainingHoursText(size.discountExpiresAt) : null;
 
                 return (
                   <div
@@ -664,7 +700,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* Quick Discount Shortcut Buttons */}
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Atalhos rápidos de desconto:</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Porcentagem de desconto:</span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {[0, 10, 15, 20, 25, 30].map(pct => (
                           <button
@@ -683,7 +719,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                     </div>
 
-                    {/* Resulting Price Banner */}
+                    {/* TEMPORARY DISCOUNT: DURATION IN HOURS */}
+                    {hasDiscount && (
+                      <div className="p-3 bg-purple-50/80 rounded-2xl border border-purple-200/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-purple-700" />
+                            Duração Temporária (em Horas)
+                          </span>
+                          {size.discountHours ? (
+                            <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                              Fixado: {size.discountHours}h
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full">
+                              Sem prazo
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Preset duration buttons in hours */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {[
+                            { label: 'Sem prazo', hours: null },
+                            { label: '12 Horas', hours: 12 },
+                            { label: '24 Horas (1 dia)', hours: 24 },
+                            { label: '48 Horas (2 dias)', hours: 48 },
+                            { label: '72 Horas (3 dias)', hours: 72 }
+                          ].map(item => {
+                            const isSelected = size.discountHours === item.hours;
+                            return (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => handleSizeDiscountDurationChange(size.id, item.hours)}
+                                className={`text-[10px] px-2.5 py-1 rounded-lg font-black transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-800 text-white shadow-xs'
+                                    : 'bg-white hover:bg-purple-100 text-purple-900 border border-purple-200'
+                                }`}
+                              >
+                                {item.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Timer remaining preview */}
+                        {remaining && (
+                          <div className="pt-1 flex items-center justify-between text-[11px] font-bold text-purple-900 border-t border-purple-200/60">
+                            <span>⏳ Validade ativa:</span>
+                            <span className="bg-amber-400 text-purple-950 px-2 py-0.5 rounded-md font-black">
+                              {remaining}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Resulting Price Banner & Clear Button */}
                     <div className={`p-2.5 rounded-2xl flex items-center justify-between text-xs ${
                       hasDiscount ? 'bg-amber-100/70 border border-amber-300 text-purple-950 font-bold' : 'bg-slate-100 text-slate-700'
                     }`}>
@@ -697,13 +791,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
                       </div>
 
-                      {hasDiscount && (
-                        <div className="text-right">
+                      {hasDiscount ? (
+                        <div className="flex flex-col items-end gap-1">
                           <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black block">
                             Cliente economiza {formatCurrency(savings)}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => handleClearDiscount(size.id)}
+                            className="text-[10px] text-red-600 hover:text-red-800 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            <span>Remover Desconto</span>
+                          </button>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -832,7 +934,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <p className="text-xs text-slate-500">Ajuste os dados de pagamento, entrega e horário.</p>
             </div>
 
-            {/* Status da Loja Aberta/Fechada */}
             <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
               <div>
                 <span className="font-bold text-sm text-slate-900 block">Status de Atendimento</span>

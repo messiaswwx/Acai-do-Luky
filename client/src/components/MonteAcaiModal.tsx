@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import type { SizeItem, BaseItem, FreeToppingItem, PremiumToppingItem, SyrupItem, CartItem, MenuData } from '../types';
 import { formatCurrency } from '../utils/format';
-import { X, Check, Plus, Minus, Sparkles, Flame } from 'lucide-react';
+import { isDiscountActive, getRemainingHoursText } from '../utils/promo';
+import { X, Check, Plus, Minus, Sparkles, Flame, Clock } from 'lucide-react';
 
 interface MonteAcaiModalProps {
   size: SizeItem;
@@ -92,13 +93,21 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
               className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-cover shrink-0 shadow-md"
             />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-amber-300 text-xs font-black uppercase tracking-wider">Montando seu açaí</span>
-                {(size.discountPercent || 0) > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
-                    <Flame className="w-2.5 h-2.5 fill-white" />
-                    {size.discountPercent}% OFF
-                  </span>
+                {isDiscountActive(size) && (
+                  <>
+                    <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                      <Flame className="w-2.5 h-2.5 fill-white" />
+                      {size.discountPercent}% OFF
+                    </span>
+                    {getRemainingHoursText(size.discountExpiresAt) && (
+                      <span className="bg-purple-900 text-amber-300 border border-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock className="w-2.5 h-2.5 text-amber-400" />
+                        {getRemainingHoursText(size.discountExpiresAt)}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
               <h2 className="text-2xl font-black text-white">{size.name}</h2>

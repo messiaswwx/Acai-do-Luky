@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { SizeItem, CartItem, Order, MenuData, StoreSettings } from './types';
 import { formatCurrency } from './utils/format';
+import { isDiscountActive, getRemainingHoursText } from './utils/promo';
 import { MonteAcaiModal } from './components/MonteAcaiModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -381,8 +382,10 @@ export default function App() {
                   const badge = getSizeBadge(size.id);
                   const isTopSeller = size.id === 'size-500';
                   const basePrice = size.originalPrice ?? size.price;
-                  const hasDiscount = (size.discountPercent || 0) > 0 && basePrice > size.price;
-                  const savings = basePrice - size.price;
+                  const isPromo = isDiscountActive(size);
+                  const remainingText = isPromo ? getRemainingHoursText(size.discountExpiresAt) : null;
+                  const activePrice = isPromo ? size.price : basePrice;
+                  const savings = basePrice - activePrice;
 
                   return (
                     <div
@@ -390,7 +393,7 @@ export default function App() {
                       className={`relative bg-white rounded-3xl p-5 border-2 transition-all flex flex-col justify-between ${
                         !size.available
                           ? 'border-slate-200 opacity-60'
-                          : hasDiscount
+                          : isPromo
                             ? 'border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/30'
                             : isTopSeller
                               ? 'border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/20'
@@ -404,11 +407,19 @@ export default function App() {
                             {badge.text}
                           </span>
 
-                          {hasDiscount && (
-                            <span className="bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
-                              <Flame className="w-3 h-3 fill-white" />
-                              {size.discountPercent}% OFF
-                            </span>
+                          {isPromo && (
+                            <>
+                              <span className="bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                                <Flame className="w-3 h-3 fill-white" />
+                                {size.discountPercent}% OFF
+                              </span>
+                              {remainingText && (
+                                <span className="bg-purple-900 text-amber-300 border border-purple-700/60 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  {remainingText}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -421,7 +432,7 @@ export default function App() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <h3 className="font-black text-slate-900 text-xl tracking-tight">{size.name}</h3>
-                            {hasDiscount && (
+                            {isPromo && (
                               <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block mt-0.5">
                                 Economize {formatCurrency(savings)}
                               </span>
@@ -429,13 +440,13 @@ export default function App() {
                           </div>
 
                           <div className="text-right flex flex-col items-end">
-                            {hasDiscount && (
+                            {isPromo && (
                               <span className="line-through text-xs font-bold text-slate-400">
                                 {formatCurrency(basePrice)}
                               </span>
                             )}
                             <div className="bg-amber-400 text-purple-950 font-black text-lg px-3 py-0.5 rounded-xl shadow-xs">
-                              {formatCurrency(size.price)}
+                              {formatCurrency(activePrice)}
                             </div>
                           </div>
                         </div>
@@ -450,10 +461,10 @@ export default function App() {
 
                         <button
                           disabled={!size.available}
-                          onClick={() => setSelectedSizeToBuild(size)}
+                          onClick={() => setSelectedSizeToBuild({ ...size, price: activePrice })}
                           className={`py-3 px-5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                             size.available
-                              ? hasDiscount || isTopSeller
+                              ? isPromo || isTopSeller
                                 ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 shadow-md shadow-amber-500/20 active:scale-98'
                                 : 'bg-purple-700 hover:bg-purple-800 text-white shadow-md shadow-purple-900/20 active:scale-98'
                               : 'bg-slate-200 text-slate-500 cursor-not-allowed'

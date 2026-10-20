@@ -5,6 +5,8 @@ export interface SizeItem {
   price: number;
   originalPrice?: number;
   discountPercent?: number;
+  discountHours?: number;
+  discountExpiresAt?: string;
   maxFreeToppings: number;
   available: boolean;
 }
