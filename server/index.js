@@ -42,10 +42,10 @@ const DEFAULT_DATA = {
   },
   menu: {
     sizes: [
-      { id: "size-300", name: "Copo 300ml", description: "Perfeito para uma pausa refrescante", price: 14.00, maxFreeToppings: 3, available: true },
-      { id: "size-500", name: "Copo 500ml", description: "O queridinho da galera, tamanho ideal", price: 20.00, maxFreeToppings: 3, available: true },
-      { id: "size-700", name: "Copo 700ml", description: "Caprichado para quem ama açaí de verdade", price: 26.00, maxFreeToppings: 4, available: true },
-      { id: "size-1000", name: "Barca Especial 1 Litro", description: "Serve 2 a 3 pessoas. Acompanha muita fartura!", price: 45.00, maxFreeToppings: 5, available: true }
+      { id: "size-300", name: "Copo 300ml", description: "Perfeito para matar aquela vontade de forma rápida e refrescante.", price: 14.00, originalPrice: 14.00, discountPercent: 0, maxFreeToppings: 3, available: true },
+      { id: "size-500", name: "Copo 500ml", description: "O queridinho da galera! Equilíbrio ideal entre açaí e acompanhamentos.", price: 17.00, originalPrice: 20.00, discountPercent: 15, maxFreeToppings: 3, available: true },
+      { id: "size-700", name: "Copo 700ml", description: "Tamanho caprichado para quem ama açaí de verdade.", price: 26.00, originalPrice: 26.00, discountPercent: 0, maxFreeToppings: 4, available: true },
+      { id: "size-1000", name: "Barca Especial 1 Litro", description: "Serve até 3 pessoas com muita fartura, amor e recheio!", price: 45.00, originalPrice: 45.00, discountPercent: 0, maxFreeToppings: 5, available: true }
     ],
     bases: [
       { id: "base-tradicional", name: "Açaí Tradicional Cremoso", available: true },

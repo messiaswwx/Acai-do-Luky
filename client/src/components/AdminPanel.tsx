@@ -17,7 +17,11 @@ import {
   MessageSquare,
   DollarSign,
   ShoppingBag,
-  Power
+  Power,
+  Flame,
+  Percent,
+  Check,
+  Save
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -42,9 +46,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [savingSettings, setSavingSettings] = useState(false);
   const [localSettings, setLocalSettings] = useState<StoreSettings>(settings);
 
+  // Local state for full menu editing & discount management
+  const [editableMenu, setEditableMenu] = useState<MenuData>(menu);
+  const [savingMenu, setSavingMenu] = useState(false);
+  const [menuSavedFeedback, setMenuSavedFeedback] = useState(false);
+
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    setEditableMenu(menu);
+  }, [menu]);
 
   const loadOrders = async () => {
     try {
@@ -95,16 +108,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleToggleItemAvailability = async (
+  // Price & Discount editing handlers
+  const handleSizeOriginalPriceChange = (sizeId: string, val: number) => {
+    setEditableMenu(prev => {
+      const sizes = prev.sizes.map(s => {
+        if (s.id !== sizeId) return s;
+        const originalPrice = Math.max(0, val);
+        const discountPercent = s.discountPercent || 0;
+        const price = discountPercent > 0 
+          ? Number((originalPrice * (1 - discountPercent / 100)).toFixed(2))
+          : originalPrice;
+        return { ...s, originalPrice, price };
+      });
+      return { ...prev, sizes };
+    });
+  };
+
+  const handleSizeDiscountChange = (sizeId: string, percent: number) => {
+    setEditableMenu(prev => {
+      const sizes = prev.sizes.map(s => {
+        if (s.id !== sizeId) return s;
+        const discountPercent = Math.max(0, Math.min(99, percent));
+        const basePrice = s.originalPrice ?? s.price;
+        const price = discountPercent > 0 
+          ? Number((basePrice * (1 - discountPercent / 100)).toFixed(2))
+          : basePrice;
+        return { ...s, originalPrice: basePrice, discountPercent, price };
+      });
+      return { ...prev, sizes };
+    });
+  };
+
+  const handlePremiumToppingPriceChange = (id: string, val: number) => {
+    setEditableMenu(prev => {
+      const premiumToppings = prev.premiumToppings.map(p => 
+        p.id === id ? { ...p, price: Math.max(0, val) } : p
+      );
+      return { ...prev, premiumToppings };
+    });
+  };
+
+  const handleToggleItemAvailability = (
     category: 'sizes' | 'bases' | 'freeToppings' | 'premiumToppings' | 'syrups',
     itemId: string
   ) => {
-    const updatedMenu = { ...menu };
-    // @ts-ignore
-    updatedMenu[category] = updatedMenu[category].map((item: any) => 
-      item.id === itemId ? { ...item, available: !item.available } : item
-    );
-    await onUpdateMenu(updatedMenu);
+    setEditableMenu(prev => {
+      const updated = { ...prev };
+      // @ts-ignore
+      updated[category] = updated[category].map((item: any) => 
+        item.id === itemId ? { ...item, available: !item.available } : item
+      );
+      return updated;
+    });
+  };
+
+  const handleSaveMenu = async () => {
+    setSavingMenu(true);
+    await onUpdateMenu(editableMenu);
+    setSavingMenu(false);
+    setMenuSavedFeedback(true);
+    setTimeout(() => setMenuSavedFeedback(false), 3000);
   };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
@@ -135,7 +198,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <img
             src="/logo.png"
             alt="Logo"
-            className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-cover shadow-sm"
+            className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-contain shadow-sm"
           />
           <div>
             <div className="flex items-center gap-2">
@@ -147,7 +210,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {settings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">Cozinha e Gestão de Pedidos em Tempo Real</p>
+            <p className="text-xs text-slate-500 mt-0.5">Cozinha, Gestão de Preços, Promoções e Cardápio</p>
           </div>
         </div>
 
@@ -253,7 +316,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           }`}
         >
           <SlidersHorizontal className="w-4 h-4" />
-          <span>Cardápio & Estoque</span>
+          <span>Preços, Descontos & Cardápio</span>
         </button>
 
         <button
@@ -478,64 +541,239 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 2: CONTROLE DE CARDÁPIO E ESTOQUE */}
+      {/* TAB 2: CONTROLE DE PREÇOS, DESCONTOS & ESTOQUE */}
       {activeTab === 'CARDAPIO' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Controle de Itens e Disponibilidade</h2>
-            <p className="text-xs text-slate-500">
-              Acabou o morango ou o copo de 700ml? Pause o item com 1 clique para não receber pedidos indisponíveis.
-            </p>
+          {/* Action Header with Save Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <Percent className="w-5 h-5 text-amber-500" />
+                <span>Gestão de Preços & Promoções</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Altere valores, aplique porcentagens de desconto e pause ingredientes esgotados em tempo real.
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveMenu}
+              disabled={savingMenu}
+              className={`py-3 px-5 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                menuSavedFeedback
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-purple-800 hover:bg-purple-900 text-white shadow-purple-900/20 active:scale-98'
+              }`}
+            >
+              {menuSavedFeedback ? (
+                <>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Cardápio Salvo!</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>{savingMenu ? 'Salvando...' : 'Salvar Alterações'}</span>
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Sizes */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-purple-900 uppercase tracking-wider">Tamanhos e Copos</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {menu.sizes.map(size => (
-                <div key={size.id} className="p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-sm block text-slate-800">{size.name}</span>
-                    <span className="text-xs text-amber-600 font-bold">{formatCurrency(size.price)}</span>
-                  </div>
-                  <button
-                    onClick={() => handleToggleItemAvailability('sizes', size.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-bold transition-colors cursor-pointer ${
-                      size.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+          {/* 1. SIZES & PROMOTIONS */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-500" />
+                <span>Copos & Descontos Promocionais</span>
+              </h3>
+              <span className="text-xs font-semibold text-slate-500">
+                O desconto é destacado automaticamente na tela do cliente
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {editableMenu.sizes.map(size => {
+                const basePrice = size.originalPrice ?? size.price;
+                const discount = size.discountPercent || 0;
+                const hasDiscount = discount > 0;
+                const savings = basePrice - size.price;
+
+                return (
+                  <div
+                    key={size.id}
+                    className={`p-4 rounded-3xl border-2 transition-all space-y-3 ${
+                      !size.available
+                        ? 'border-slate-200 bg-slate-50 opacity-60'
+                        : hasDiscount
+                          ? 'border-amber-400 bg-amber-50/20 shadow-md ring-2 ring-amber-400/20'
+                          : 'border-slate-200 hover:border-purple-300'
                     }`}
                   >
-                    {size.available ? 'Ativo' : 'Pausado'}
-                  </button>
+                    {/* Size Top Row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-base text-slate-900">{size.name}</span>
+                        {hasDiscount && (
+                          <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                            <Flame className="w-3 h-3 fill-white" />
+                            {discount}% OFF
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleToggleItemAvailability('sizes', size.id)}
+                        className={`text-xs px-2.5 py-1 rounded-full font-black transition-colors cursor-pointer ${
+                          size.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {size.available ? 'Disponível' : 'Pausado'}
+                      </button>
+                    </div>
+
+                    {/* Inputs: Normal Price & Discount */}
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Preço Normal (R$)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="1"
+                          value={basePrice}
+                          onChange={e => handleSizeOriginalPriceChange(size.id, parseFloat(e.target.value) || 0)}
+                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Desconto (% OFF)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="90"
+                          value={discount}
+                          onChange={e => handleSizeDiscountChange(size.id, parseInt(e.target.value) || 0)}
+                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 bg-white text-purple-900"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Discount Shortcut Buttons */}
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Atalhos rápidos de desconto:</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[0, 10, 15, 20, 25, 30].map(pct => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => handleSizeDiscountChange(size.id, pct)}
+                            className={`text-[11px] px-2.5 py-1 rounded-lg font-black transition-all cursor-pointer ${
+                              discount === pct
+                                ? 'bg-amber-400 text-purple-950 shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            }`}
+                          >
+                            {pct === 0 ? 'Sem desc.' : `${pct}%`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Resulting Price Banner */}
+                    <div className={`p-2.5 rounded-2xl flex items-center justify-between text-xs ${
+                      hasDiscount ? 'bg-amber-100/70 border border-amber-300 text-purple-950 font-bold' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">Preço Final ao Cliente:</span>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-black text-base text-purple-950">{formatCurrency(size.price)}</span>
+                          {hasDiscount && (
+                            <span className="line-through text-slate-400 text-[11px]">{formatCurrency(basePrice)}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {hasDiscount && (
+                        <div className="text-right">
+                          <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black block">
+                            Cliente economiza {formatCurrency(savings)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. ADICIONAIS ESPECIAIS (PAGOS) */}
+          <div className="space-y-3 pt-3 border-t border-slate-200">
+            <h3 className="font-black text-sm text-amber-700 uppercase tracking-wider flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-amber-600" />
+              <span>Preços dos Adicionais Especiais</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {editableMenu.premiumToppings.map(item => (
+                <div key={item.id} className="p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-800">{item.name}</span>
+                    <button
+                      onClick={() => handleToggleItemAvailability('premiumToppings', item.id)}
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-black transition-colors cursor-pointer ${
+                        item.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {item.available ? 'Disponível' : 'Pausado'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-bold">Valor: R$</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={item.price}
+                      onChange={e => handlePremiumToppingPriceChange(item.id, parseFloat(e.target.value) || 0)}
+                      className="w-full text-xs font-bold p-1.5 rounded-lg border border-slate-200 bg-white"
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Bases */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-purple-900 uppercase tracking-wider">Bases de Açaí / Cupuaçu</h3>
+          {/* 3. BASES */}
+          <div className="space-y-3 pt-3 border-t border-slate-200">
+            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Bases de Açaí / Cupuaçu</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {menu.bases.map(base => (
-                <div key={base.id} className="p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <span className="font-bold text-sm text-slate-800">{base.name}</span>
+              {editableMenu.bases.map(base => (
+                <div key={base.id} className="p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-800">{base.name}</span>
                   <button
                     onClick={() => handleToggleItemAvailability('bases', base.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-bold transition-colors cursor-pointer ${
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-black transition-colors cursor-pointer ${
                       base.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {base.available ? 'Ativo' : 'Pausado'}
+                    {base.available ? 'OK' : 'Falta'}
                   </button>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Free Toppings */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-purple-900 uppercase tracking-wider">Acompanhamentos Grátis</h3>
+          {/* 4. ACOMPANHAMENTOS GRÁTIS */}
+          <div className="space-y-3 pt-3 border-t border-slate-200">
+            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Acompanhamentos Grátis</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {menu.freeToppings.map(item => (
+              {editableMenu.freeToppings.map(item => (
                 <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-800 truncate mr-2">{item.name}</span>
                   <button
@@ -551,34 +789,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          {/* Premium Toppings */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-amber-700 uppercase tracking-wider">Adicionais Especiais (Pagos)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {menu.premiumToppings.map(item => (
-                <div key={item.id} className="p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-xs block text-slate-800">{item.name}</span>
-                    <span className="text-[11px] text-amber-600 font-bold">{formatCurrency(item.price)}</span>
-                  </div>
-                  <button
-                    onClick={() => handleToggleItemAvailability('premiumToppings', item.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-bold transition-colors cursor-pointer ${
-                      item.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {item.available ? 'Ativo' : 'Pausado'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Syrups */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-purple-900 uppercase tracking-wider">Caldas & Coberturas</h3>
+          {/* 5. CALDAS */}
+          <div className="space-y-3 pt-3 border-t border-slate-200">
+            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Caldas & Coberturas</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {menu.syrups.map(item => (
+              {editableMenu.syrups.map(item => (
                 <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-800 truncate mr-2">{item.name}</span>
                   <button
@@ -592,6 +807,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Bottom Save Button Reminder */}
+          <div className="pt-4 border-t border-slate-200 flex justify-end">
+            <button
+              onClick={handleSaveMenu}
+              disabled={savingMenu}
+              className="py-3 px-6 rounded-2xl bg-purple-800 hover:bg-purple-900 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-purple-900/20 active:scale-98 transition-all cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{savingMenu ? 'Salvando...' : 'Salvar Alterações de Preço'}</span>
+            </button>
           </div>
         </div>
       )}

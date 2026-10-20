@@ -3,6 +3,8 @@ export interface SizeItem {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
+  discountPercent?: number;
   maxFreeToppings: number;
   available: boolean;
 }

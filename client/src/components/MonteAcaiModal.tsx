@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { SizeItem, BaseItem, FreeToppingItem, PremiumToppingItem, SyrupItem, CartItem, MenuData } from '../types';
 import { formatCurrency } from '../utils/format';
-import { X, Check, Plus, Minus, Sparkles } from 'lucide-react';
+import { X, Check, Plus, Minus, Sparkles, Flame } from 'lucide-react';
 
 interface MonteAcaiModalProps {
   size: SizeItem;
@@ -92,7 +92,15 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
               className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-cover shrink-0 shadow-md"
             />
             <div>
-              <span className="text-amber-300 text-xs font-black uppercase tracking-wider">Montando seu açaí</span>
+              <div className="flex items-center gap-2">
+                <span className="text-amber-300 text-xs font-black uppercase tracking-wider">Montando seu açaí</span>
+                {(size.discountPercent || 0) > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                    <Flame className="w-2.5 h-2.5 fill-white" />
+                    {size.discountPercent}% OFF
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl font-black text-white">{size.name}</h2>
               <p className="text-purple-200 text-xs mt-0.5">{size.description}</p>
             </div>
@@ -309,7 +317,14 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
           <div>
             <div className="text-[11px] text-slate-500 font-semibold uppercase">Total deste item</div>
-            <div className="text-2xl font-black text-purple-950">{formatCurrency(unitPrice)}</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-purple-950">{formatCurrency(unitPrice)}</span>
+              {(size.discountPercent || 0) > 0 && (size.originalPrice || size.price) > size.price && (
+                <span className="line-through text-xs font-bold text-slate-400">
+                  {formatCurrency((size.originalPrice || size.price) + premiumTotal)}
+                </span>
+              )}
+            </div>
           </div>
 
           <button
