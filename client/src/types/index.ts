@@ -55,6 +55,8 @@ export interface StoreSettings {
   address: string;
   minOrderValue: number;
   adminPin?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorBackupCode?: string;
 }
 
 export interface CartItem {

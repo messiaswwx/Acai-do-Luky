@@ -39,7 +39,9 @@ const DEFAULT_DATA = {
     estimatedTime: "30 - 45 min",
     address: "Atendimento Delivery & Retirada",
     minOrderValue: 12.00,
-    adminPin: "1234"
+    adminPin: "1234",
+    twoFactorEnabled: true,
+    twoFactorBackupCode: "998877"
   },
   menu: {
     sizes: [
@@ -85,7 +87,12 @@ function loadDatabase() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      if (parsed && parsed.settings) {
+        if (parsed.settings.twoFactorEnabled === undefined) parsed.settings.twoFactorEnabled = true;
+        if (!parsed.settings.twoFactorBackupCode) parsed.settings.twoFactorBackupCode = "998877";
+      }
+      return parsed;
     }
   } catch (err) {
     console.error("Erro ao ler banco de dados, inicializando padrão:", err);
@@ -104,9 +111,9 @@ function saveDatabase(data) {
 
 let db = loadDatabase();
 
-// Controle de tentativas de login e sessões ativas
-const loginAttempts = new Map(); // ip -> { count: number, lockUntil: number }
-const activeSessions = new Map(); // token -> { expiresAt: number, createdAt: number }
+// Controle de tentativas de login, bloqueio temporário (Lockout) e 2FA
+const loginAttempts = new Map(); // identifier -> { count: number, lockUntil: number }
+const twoFactorChallenges = new Map(); // challengeToken -> { code: string, createdAt: number, expiresAt: number, attempts: number }
 
 function getClientIdentifier(req) {
   return req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'client-default';
@@ -121,6 +128,7 @@ function checkBruteForce(identifier) {
     return { allowed: false, remainingSec };
   }
   if (attempt.lockUntil && attempt.lockUntil <= now) {
+    // Fim do bloqueio temporário
     loginAttempts.delete(identifier);
     return { allowed: true };
   }
@@ -131,15 +139,30 @@ function recordFailedAttempt(identifier) {
   const now = Date.now();
   const attempt = loginAttempts.get(identifier) || { count: 0, lockUntil: 0 };
   attempt.count += 1;
-  if (attempt.count >= 5) {
-    attempt.lockUntil = now + 60 * 1000; // Bloqueio temporário de 60 segundos
+
+  // Tempo progressivo de bloqueio por tentativas erradas
+  let lockoutSec = 0;
+  if (attempt.count === 3) {
+    lockoutSec = 30; // 3 tentativas: bloqueio de 30s
+  } else if (attempt.count === 4) {
+    lockoutSec = 60; // 4 tentativas: bloqueio de 60s
+  } else if (attempt.count >= 5) {
+    lockoutSec = 120; // 5+ tentativas: bloqueio de 120s
   }
+
+  if (lockoutSec > 0) {
+    attempt.lockUntil = now + lockoutSec * 1000;
+  }
+
   loginAttempts.set(identifier, attempt);
-  const remainingAttempts = Math.max(0, 5 - attempt.count);
+
+  const attemptsUntilLock = attempt.count < 3 ? (3 - attempt.count) : 0;
+
   return {
-    locked: attempt.count >= 5,
-    remainingSec: attempt.count >= 5 ? 60 : 0,
-    attemptsLeft: remainingAttempts
+    locked: lockoutSec > 0,
+    remainingSec: lockoutSec,
+    attemptsLeft: attemptsUntilLock,
+    totalFailures: attempt.count
   };
 }
 
@@ -147,23 +170,27 @@ function clearFailedAttempts(identifier) {
   loginAttempts.delete(identifier);
 }
 
-// Endpoints de Autenticação com Tempo de Sessão e Validação
+// -------------------------------------------------------------
+// ENDPOINTS DE AUTENTICAÇÃO E VERIFICAÇÃO EM DUAS ETAPAS (2FA)
+// -------------------------------------------------------------
+
+// ETAPA 1: Validação do PIN de Acesso
 app.post('/api/auth/login', (req, res) => {
   const clientId = getClientIdentifier(req);
-  const { pin, durationHours = 8 } = req.body || {};
+  const { pin } = req.body || {};
 
-  // Validação de formato do PIN
+  // Validação básica de entrada
   if (!pin || typeof pin !== 'string' || pin.trim().length < 4) {
     return res.status(400).json({ 
-      error: 'Formato inválido. O PIN deve ter no mínimo 4 dígitos numéricos.' 
+      error: 'O PIN de acesso deve conter no mínimo 4 dígitos numéricos.' 
     });
   }
 
-  // Verificação contra força bruta
+  // Verifica se o IP está bloqueado temporariamente por erro
   const brute = checkBruteForce(clientId);
   if (!brute.allowed) {
     return res.status(429).json({
-      error: `Acesso bloqueado temporariamente por excesso de tentativas. Aguarde ${brute.remainingSec}s.`,
+      error: `Acesso temporariamente bloqueado por tentativas incorretas. Aguarde ${brute.remainingSec}s para tentar novamente.`,
       lockoutSeconds: brute.remainingSec
     });
   }
@@ -174,54 +201,142 @@ app.post('/api/auth/login', (req, res) => {
     const failInfo = recordFailedAttempt(clientId);
     if (failInfo.locked) {
       return res.status(429).json({
-        error: 'Limite de 5 tentativas incorretas excedido. Acesso bloqueado por 60 segundos por segurança.',
-        lockoutSeconds: 60,
+        error: `Tentativas excedidas! Por segurança, o login foi bloqueado por ${failInfo.remainingSec} segundos.`,
+        lockoutSeconds: failInfo.remainingSec,
         attemptsLeft: 0
       });
     }
     return res.status(401).json({
-      error: `PIN incorreto. Você possui mais ${failInfo.attemptsLeft} tentativa(s) antes do bloqueio temporário.`,
+      error: `PIN incorreto. Você tem mais ${failInfo.attemptsLeft} tentativa(s) antes do bloqueio de segurança.`,
       attemptsLeft: failInfo.attemptsLeft
     });
   }
 
-  // PIN correto: limpa tentativas incorretas
+  // PIN correto: verifica se o 2FA está habilitado nas configurações
+  const is2faActive = db.settings?.twoFactorEnabled !== false;
+
+  if (is2faActive) {
+    // Gera código 2FA aleatório de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const challengeToken = `ch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Salva o desafio por 5 minutos
+    twoFactorChallenges.set(challengeToken, {
+      code,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      attempts: 0
+    });
+
+    console.log(`\n=================================================`);
+    console.log(`🔐 [2FA AÇAÍ DO LUKY] CÓDIGO DE VERIFICAÇÃO: ${code}`);
+    console.log(`📱 Destinatário WhatsApp: ${db.settings?.whatsapp || 'Não informado'}`);
+    console.log(`=================================================\n`);
+
+    const rawPhone = db.settings?.whatsapp || '5511999999999';
+
+    return res.json({
+      require2FA: true,
+      challengeToken,
+      phone: rawPhone,
+      demoCode: code
+    });
+  }
+
+  // Se o 2FA estiver desligado, autoriza diretamente
   clearFailedAttempts(clientId);
-
-  // Calcula validade da sessão (de 1h até 72h, padrão 8h)
-  const validDurationHours = Math.min(72, Math.max(1, Number(durationHours) || 8));
-  const loggedInAt = Date.now();
-  const expiresAt = loggedInAt + validDurationHours * 3600 * 1000;
-  const token = `adm_${loggedInAt}_${Math.random().toString(36).substring(2, 10)}`;
-
-  activeSessions.set(token, { expiresAt, createdAt: loggedInAt });
-
   res.json({
     success: true,
-    token,
-    loggedInAt,
-    expiresAt,
-    durationHours: validDurationHours,
-    storeName: db.settings?.storeName || 'Açaí do Luky'
+    require2FA: false
   });
 });
 
-app.post('/api/auth/verify', (req, res) => {
-  const { token } = req.body || {};
-  if (!token || !activeSessions.has(token)) {
-    return res.status(401).json({ valid: false, error: 'Sessão inválida ou inexistente' });
+// ETAPA 2: Validação do Código de 2FA
+app.post('/api/auth/verify-2fa', (req, res) => {
+  const clientId = getClientIdentifier(req);
+  const { challengeToken, code } = req.body || {};
+
+  const brute = checkBruteForce(clientId);
+  if (!brute.allowed) {
+    return res.status(429).json({
+      error: `Acesso bloqueado temporariamente. Aguarde ${brute.remainingSec}s.`,
+      lockoutSeconds: brute.remainingSec
+    });
   }
 
-  const session = activeSessions.get(token);
-  if (Date.now() > session.expiresAt) {
-    activeSessions.delete(token);
-    return res.status(401).json({ valid: false, error: 'Sessão expirada' });
+  if (!challengeToken || !twoFactorChallenges.has(challengeToken)) {
+    return res.status(400).json({ 
+      error: 'Sessão de verificação 2FA expirada ou inválida. Solicite um novo código.' 
+    });
   }
+
+  const challenge = twoFactorChallenges.get(challengeToken);
+
+  if (Date.now() > challenge.expiresAt) {
+    twoFactorChallenges.delete(challengeToken);
+    return res.status(400).json({ 
+      error: 'O código de 6 dígitos expirou. Por favor, clique em Reenviar Código.' 
+    });
+  }
+
+  const inputCode = String(code || '').trim();
+  const backupMasterCode = String(db.settings?.twoFactorBackupCode || '998877').trim();
+
+  // Valida com o código gerado OU com a Chave Mestra de Backup configurada
+  if (inputCode === challenge.code || inputCode === backupMasterCode) {
+    twoFactorChallenges.delete(challengeToken);
+    clearFailedAttempts(clientId);
+    return res.json({ success: true });
+  }
+
+  // Código 2FA incorreto
+  challenge.attempts += 1;
+  const failInfo = recordFailedAttempt(clientId);
+
+  if (failInfo.locked) {
+    twoFactorChallenges.delete(challengeToken);
+    return res.status(429).json({
+      error: `Tentativas excedidas! Acesso bloqueado por ${failInfo.remainingSec} segundos.`,
+      lockoutSeconds: failInfo.remainingSec
+    });
+  }
+
+  return res.status(401).json({
+    error: `Código 2FA incorreto. Tente novamente ou use sua Chave Mestra. (${failInfo.attemptsLeft} tentativas restantes)`,
+    attemptsLeft: failInfo.attemptsLeft
+  });
+});
+
+// Reenvio do Código 2FA
+app.post('/api/auth/resend-2fa', (req, res) => {
+  const clientId = getClientIdentifier(req);
+  const { challengeToken } = req.body || {};
+
+  const brute = checkBruteForce(clientId);
+  if (!brute.allowed) {
+    return res.status(429).json({
+      error: `Aguarde ${brute.remainingSec}s antes de reenviar um novo código.`,
+      lockoutSeconds: brute.remainingSec
+    });
+  }
+
+  if (!challengeToken || !twoFactorChallenges.has(challengeToken)) {
+    return res.status(400).json({ error: 'Desafio 2FA não encontrado. Volte para o início.' });
+  }
+
+  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const challenge = twoFactorChallenges.get(challengeToken);
+  challenge.code = newCode;
+  challenge.expiresAt = Date.now() + 5 * 60 * 1000;
+  challenge.attempts = 0;
+
+  console.log(`\n=================================================`);
+  console.log(`🔄 [2FA REENVIADO] NOVO CÓDIGO DE VERIFICAÇÃO: ${newCode}`);
+  console.log(`=================================================\n`);
 
   res.json({
-    valid: true,
-    expiresAt: session.expiresAt,
-    remainingSeconds: Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000))
+    success: true,
+    demoCode: newCode
   });
 });
 

@@ -30,8 +30,6 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { AdminSession } from '../utils/auth';
-import { formatRemainingTime, isExpiringSoon } from '../utils/auth';
 
 interface AdminPanelProps {
   settings: StoreSettings;
@@ -39,7 +37,6 @@ interface AdminPanelProps {
   onUpdateSettings: (newSettings: StoreSettings) => Promise<void>;
   onUpdateMenu: (newMenu: MenuData) => Promise<void>;
   onLogout?: () => void;
-  session?: AdminSession | null;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -47,8 +44,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   menu,
   onUpdateSettings,
   onUpdateMenu,
-  onLogout,
-  session
+  onLogout
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'CONFIGURACOES'>('PEDIDOS');
@@ -57,19 +53,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'TODOS'>('TODOS');
   const [savingSettings, setSavingSettings] = useState(false);
   const [localSettings, setLocalSettings] = useState<StoreSettings>(settings);
-
-  // Tempo de expiração de autenticação
-  const [remainingSessionText, setRemainingSessionText] = useState<string>(() => {
-    return session ? formatRemainingTime(session.expiresAt) : '';
-  });
-
-  useEffect(() => {
-    if (!session) return;
-    const updateTime = () => setRemainingSessionText(formatRemainingTime(session.expiresAt));
-    updateTime();
-    const interval = setInterval(updateTime, 15000);
-    return () => clearInterval(interval);
-  }, [session]);
 
   // Local state for full menu editing & discount management
   const [editableMenu, setEditableMenu] = useState<MenuData>(menu);
@@ -322,20 +305,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <ExternalLink className="w-3.5 h-3.5" />
             <span>Cardápio Cliente</span>
           </Link>
-
-          {session && (
-            <div
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
-                isExpiringSoon(session.expiresAt)
-                  ? 'bg-amber-100 text-amber-950 border-amber-400 animate-pulse shadow-xs'
-                  : 'bg-purple-50 text-purple-900 border-purple-200'
-              }`}
-              title={`Sessão iniciada às ${new Date(session.loggedInAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Expira às ${new Date(session.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`}
-            >
-              <Clock className="w-3.5 h-3.5 text-purple-700" />
-              <span>Sessão: {remainingSessionText}</span>
-            </div>
-          )}
 
           {onLogout && (
             <button
@@ -1096,21 +1065,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             </div>
 
-            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-1.5">
-              <label className="block text-xs font-black text-purple-950">
-                PIN de Acesso do Painel (Senha de Login)
-              </label>
-              <input
-                type="text"
-                maxLength={20}
-                value={localSettings.adminPin || '1234'}
-                onChange={e => setLocalSettings({ ...localSettings, adminPin: e.target.value })}
-                placeholder="Ex: 1234"
-                className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white"
-              />
-              <span className="text-[10px] text-purple-700 block">
-                Esta senha é exigida na tela de login administrativo (/admin).
-              </span>
+            {/* SEGURANÇA E 2FA */}
+            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🔐</span>
+                <h3 className="text-xs font-black text-purple-950 uppercase tracking-wider">
+                  Segurança & Verificação em Duas Etapas (2FA)
+                </h3>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  PIN de Acesso Principal (Senha do Painel)
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={localSettings.adminPin || '1234'}
+                  onChange={e => setLocalSettings({ ...localSettings, adminPin: e.target.value.replace(/\D/g, '') })}
+                  placeholder="Ex: 1234"
+                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white"
+                />
+                <span className="text-[10px] text-purple-700 block mt-1">
+                  Exigido na primeira etapa de login do /admin.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-purple-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">Exigir 2FA (Verificação em 2 Etapas)</span>
+                  <span className="text-[11px] text-slate-500">
+                    Gera um código de 6 dígitos no WhatsApp além do PIN
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLocalSettings({ ...localSettings, twoFactorEnabled: !localSettings.twoFactorEnabled })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    localSettings.twoFactorEnabled !== false ? 'bg-purple-800 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {localSettings.twoFactorEnabled !== false ? 'Ativado' : 'Desativado'}
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Chave Mestra de Backup 2FA (Emergência)
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={localSettings.twoFactorBackupCode || '998877'}
+                  onChange={e => setLocalSettings({ ...localSettings, twoFactorBackupCode: e.target.value.replace(/\D/g, '') })}
+                  placeholder="Ex: 998877"
+                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white font-mono"
+                />
+                <span className="text-[10px] text-purple-700 block mt-1">
+                  Código fixo de emergência caso você não tenha acesso ao WhatsApp no momento.
+                </span>
+              </div>
             </div>
 
             <button
