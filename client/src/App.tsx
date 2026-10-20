@@ -81,9 +81,9 @@ export default function App() {
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
   const [menu, setMenu] = useState<MenuData>(INITIAL_MENU);
 
-  // Admin Auth State (autenticação persistente até o logout manual)
+  // Admin Auth State: Exige o PIN toda vez que entra na aba de admin (desbloqueio por sessão/aba)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('luky_admin_auth') === 'true';
+    return sessionStorage.getItem('luky_admin_unlocked') === 'true';
   });
 
   // Customer State
@@ -218,7 +218,7 @@ export default function App() {
   }, []);
 
   const handleAdminLogout = useCallback(() => {
-    localStorage.removeItem('luky_admin_auth');
+    sessionStorage.removeItem('luky_admin_unlocked');
     setIsAdminAuthenticated(false);
   }, []);
 

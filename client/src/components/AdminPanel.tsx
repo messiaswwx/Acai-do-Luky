@@ -1125,6 +1125,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Código fixo de emergência caso você não tenha acesso ao WhatsApp no momento.
                 </span>
               </div>
+
+              {/* Status do Dispositivo Confiável */}
+              <div className="pt-2 border-t border-purple-200/60 flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Autorização deste Aparelho</span>
+                  <span className="text-[11px] text-slate-500">
+                    {localStorage.getItem('luky_device_token')
+                      ? 'Este aparelho já está verificado com 2FA (pede apenas o PIN ao entrar).'
+                      : 'Este aparelho ainda precisará validar o 2FA no próximo acesso.'}
+                  </span>
+                </div>
+                {localStorage.getItem('luky_device_token') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const token = localStorage.getItem('luky_device_token');
+                      fetch('/api/auth/revoke-device', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deviceToken: token })
+                      }).catch(() => {});
+                      localStorage.removeItem('luky_device_token');
+                      alert('Autorização deste aparelho removida. No próximo login, o 2FA será solicitado novamente.');
+                    }}
+                    className="text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Exigir 2FA novamente neste aparelho
+                  </button>
+                )}
+              </div>
             </div>
 
             <button

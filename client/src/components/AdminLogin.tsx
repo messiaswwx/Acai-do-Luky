@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, KeyRound, Smartphone, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, KeyRound, Smartphone, RefreshCw, CheckCircle2, ShieldAlert, Laptop } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface AdminLoginProps {
   expectedPin?: string;
   onLoginSuccess: () => void;
 }
+
+const DEVICE_TOKEN_KEY = 'luky_device_token';
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({
   expectedPin = '1234',
@@ -17,6 +19,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   // Step 1: PIN state
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
+  const [isDeviceKnown, setIsDeviceKnown] = useState<boolean>(() => {
+    return Boolean(localStorage.getItem(DEVICE_TOKEN_KEY));
+  });
 
   // Step 2: 2FA state
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -87,17 +92,22 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
     setIsSubmitting(true);
 
     try {
+      const storedDeviceToken = localStorage.getItem(DEVICE_TOKEN_KEY) || '';
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pin.trim() })
+        body: JSON.stringify({
+          pin: pin.trim(),
+          deviceToken: storedDeviceToken
+        })
       });
 
       const data = await res.json();
 
       if (res.ok) {
         if (data.require2FA) {
-          // Avança para a Etapa 2 (2FA)
+          // Dispositivo novo / não autorizado: avança para a Etapa 2 (2FA)
           setChallengeToken(data.challengeToken);
           setPhone(data.phone || '5511999999999');
           setDemoCode(data.demoCode || '');
@@ -109,8 +119,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           return;
         }
 
-        // Se 2FA não for exigido, loga direto
-        localStorage.setItem('luky_admin_auth', 'true');
+        // Dispositivo já autorizado ou 2FA desligado: acesso liberado com sucesso!
+        if (data.deviceToken) {
+          localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
+        }
+        sessionStorage.setItem('luky_admin_unlocked', 'true');
         onLoginSuccess();
         return;
       }
@@ -127,9 +140,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         setErrorMsg(data.error || 'Erro ao validar PIN.');
       }
     } catch {
-      // Fallback offline de segurança
+      // Fallback offline de emergência
       if (pin.trim() === (expectedPin || '1234').trim()) {
-        localStorage.setItem('luky_admin_auth', 'true');
+        sessionStorage.setItem('luky_admin_unlocked', 'true');
         onLoginSuccess();
       } else {
         setErrorMsg('PIN incorreto. Tente novamente.');
@@ -140,7 +153,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
     }
   };
 
-  // Envio da Etapa 2: Código 2FA
+  // Envio da Etapa 2: Código 2FA para autorizar este dispositivo
   const handle2faSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -160,14 +173,20 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           challengeToken,
-          code: twoFactorCode.trim()
+          code: twoFactorCode.trim(),
+          deviceName: navigator.userAgent.includes('Mobile') ? 'Celular' : 'Computador/Notebook'
         })
       });
 
       const data = await res.json();
 
       if (res.ok && data.success) {
-        localStorage.setItem('luky_admin_auth', 'true');
+        // Dispositivo agora está autorizado permanentemente!
+        if (data.deviceToken) {
+          localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
+          setIsDeviceKnown(true);
+        }
+        sessionStorage.setItem('luky_admin_unlocked', 'true');
         onLoginSuccess();
         return;
       }
@@ -184,9 +203,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         setErrorMsg(data.error || 'Erro ao validar código.');
       }
     } catch {
-      // Fallback de emergência (código backup 998877 ou código demo)
+      // Fallback offline (código backup 998877 ou código demo)
       if (twoFactorCode.trim() === '998877' || (demoCode && twoFactorCode.trim() === demoCode)) {
-        localStorage.setItem('luky_admin_auth', 'true');
+        localStorage.setItem(DEVICE_TOKEN_KEY, `local_${Date.now()}`);
+        sessionStorage.setItem('luky_admin_unlocked', 'true');
         onLoginSuccess();
       } else {
         setErrorMsg('Código incorreto.');
@@ -234,7 +254,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   };
 
   const whatsappShareUrl = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-    `🔐 [Açaí do Luky] Seu código de verificação em duas etapas (2FA) é: ${demoCode}`
+    `🔐 [Açaí do Luky] Código para autorizar este dispositivo no painel: ${demoCode}`
   )}`;
 
   return (
@@ -260,10 +280,18 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             <h1 className="text-2xl font-black text-slate-900">Painel do Luky</h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {step === 'PIN'
-                ? 'Acesso administrativo com proteção em duas etapas (2FA)'
-                : 'Etapa 2: Confirmação de Segurança'}
+                ? 'Digite seu PIN para desbloquear o painel'
+                : 'Autorização de Novo Dispositivo (2FA)'}
             </p>
           </div>
+
+          {/* Badge de Dispositivo Autorizado */}
+          {step === 'PIN' && isDeviceKnown && (
+            <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-full">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Aparelho Autorizado (2FA dispensado)</span>
+            </div>
+          )}
         </div>
 
         {/* Notificação de Bloqueio por Tentativas Incorretas (Lockout) */}
@@ -275,7 +303,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 Acesso Temporariamente Bloqueado
               </span>
               <p className="text-xs text-red-800">
-                Tentativas incorretas consecutivas detectadas. Por segurança, aguarde o tempo terminar para tentar novamente:
+                Tentativas incorretas consecutivas detectadas. Aguarde o cronômetro para tentar novamente:
               </p>
               <div className="pt-1 flex items-center gap-1.5 font-black text-sm text-red-700">
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
@@ -347,28 +375,31 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
               {lockoutSeconds > 0 ? (
                 `Bloqueado (${lockoutSeconds}s)`
               ) : isSubmitting ? (
-                'Verificando PIN...'
+                'Validando PIN...'
               ) : (
                 <>
-                  <span>Avançar para Verificação</span>
-                  <span className="text-amber-400">→</span>
+                  <span>Entrar no Painel</span>
+                  <span className="text-amber-400 font-bold">→</span>
                 </>
               )}
             </button>
           </form>
         ) : (
           /* ========================================================= */
-          /* ETAPA 2: VERIFICAÇÃO EM DUAS ETAPAS (2FA)                */
+          /* ETAPA 2: VERIFICAÇÃO 2FA PARA AUTORIZAR ESTE DISPOSITIVO  */
           /* ========================================================= */
           <form onSubmit={handle2faSubmit} className="space-y-4">
             <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-3.5 space-y-2 text-center">
               <div className="w-10 h-10 rounded-full bg-purple-900 text-amber-300 flex items-center justify-center mx-auto shadow-md">
-                <Smartphone className="w-5 h-5" />
+                <Laptop className="w-5 h-5" />
               </div>
-              <h2 className="text-sm font-black text-purple-950">Código de 6 Dígitos Enviado</h2>
+              <h2 className="text-sm font-black text-purple-950">Novo Dispositivo Detectado</h2>
               <p className="text-xs text-purple-800 leading-relaxed">
-                Um código temporário de segurança foi gerado para o WhatsApp <strong>{formatMaskedPhone(phone)}</strong>.
+                Para sua segurança, autorize este aparelho com o código enviado para o WhatsApp <strong>{formatMaskedPhone(phone)}</strong>.
               </p>
+              <span className="inline-block text-[10px] text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full font-medium">
+                ✨ Só precisa autorizar uma vez neste aparelho!
+              </span>
 
               {/* Botão de Envio Direto via WhatsApp */}
               <div className="pt-1 flex flex-col gap-2">
@@ -390,7 +421,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                     className="text-[11px] text-purple-700 bg-white border border-purple-200 hover:bg-purple-100/60 font-semibold py-1.5 px-2.5 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                     title="Clique para preencher automaticamente"
                   >
-                    <span>Código 2FA:</span>
+                    <span>Código 2FA gerado:</span>
                     <strong className="tracking-widest font-mono text-purple-950 bg-amber-100 px-1.5 py-0.5 rounded text-xs">{demoCode}</strong>
                     <span className="text-[10px] text-slate-400 font-normal">(Clique p/ preencher)</span>
                   </button>
@@ -426,11 +457,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
               {lockoutSeconds > 0 ? (
                 `Bloqueado (${lockoutSeconds}s)`
               ) : isSubmitting ? (
-                'Validando Código...'
+                'Autorizando Aparelho...'
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Confirmar e Acessar Painel</span>
+                  <span>Autorizar Aparelho e Entrar</span>
                 </>
               )}
             </button>

@@ -80,7 +80,8 @@ const DEFAULT_DATA = {
       { id: "syrup-mel", name: "Mel de Abelha Puro", available: true }
     ]
   },
-  orders: []
+  orders: [],
+  trustedDevices: []
 };
 
 function loadDatabase() {
@@ -91,6 +92,9 @@ function loadDatabase() {
       if (parsed && parsed.settings) {
         if (parsed.settings.twoFactorEnabled === undefined) parsed.settings.twoFactorEnabled = true;
         if (!parsed.settings.twoFactorBackupCode) parsed.settings.twoFactorBackupCode = "998877";
+      }
+      if (!Array.isArray(parsed.trustedDevices)) {
+        parsed.trustedDevices = [];
       }
       return parsed;
     }
@@ -174,10 +178,10 @@ function clearFailedAttempts(identifier) {
 // ENDPOINTS DE AUTENTICAÇÃO E VERIFICAÇÃO EM DUAS ETAPAS (2FA)
 // -------------------------------------------------------------
 
-// ETAPA 1: Validação do PIN de Acesso
+// ETAPA 1: Validação do PIN de Acesso + Verificação de Dispositivo Confiável
 app.post('/api/auth/login', (req, res) => {
   const clientId = getClientIdentifier(req);
-  const { pin } = req.body || {};
+  const { pin, deviceToken } = req.body || {};
 
   // Validação básica de entrada
   if (!pin || typeof pin !== 'string' || pin.trim().length < 4) {
@@ -212,11 +216,34 @@ app.post('/api/auth/login', (req, res) => {
     });
   }
 
-  // PIN correto: verifica se o 2FA está habilitado nas configurações
+  // PIN correto!
   const is2faActive = db.settings?.twoFactorEnabled !== false;
 
+  // Verifica se o 2FA está ativo
   if (is2faActive) {
-    // Gera código 2FA aleatório de 6 dígitos
+    // Verifica se este dispositivo já foi autorizado anteriormente via 2FA
+    const isDeviceTrusted = Array.isArray(db.trustedDevices) && 
+      Boolean(deviceToken) && 
+      db.trustedDevices.some(d => d.token === deviceToken);
+
+    if (isDeviceTrusted) {
+      // Dispositivo já autorizado com 2FA! Dispensa o código 2FA e autoriza o acesso direto com o PIN
+      const deviceIndex = db.trustedDevices.findIndex(d => d.token === deviceToken);
+      if (deviceIndex !== -1) {
+        db.trustedDevices[deviceIndex].lastUsedAt = new Date().toISOString();
+        db.trustedDevices[deviceIndex].ip = clientId;
+        saveDatabase(db);
+      }
+      clearFailedAttempts(clientId);
+      return res.json({
+        success: true,
+        require2FA: false,
+        deviceTrusted: true,
+        deviceToken
+      });
+    }
+
+    // Dispositivo NÃO autorizado ainda: gera código 2FA de 6 dígitos para autorizar o aparelho
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const challengeToken = `ch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -229,7 +256,7 @@ app.post('/api/auth/login', (req, res) => {
     });
 
     console.log(`\n=================================================`);
-    console.log(`🔐 [2FA AÇAÍ DO LUKY] CÓDIGO DE VERIFICAÇÃO: ${code}`);
+    console.log(`🔐 [2FA AÇAÍ DO LUKY] CÓDIGO DE AUTORIZAÇÃO DE DISPOSITIVO: ${code}`);
     console.log(`📱 Destinatário WhatsApp: ${db.settings?.whatsapp || 'Não informado'}`);
     console.log(`=================================================\n`);
 
@@ -243,18 +270,19 @@ app.post('/api/auth/login', (req, res) => {
     });
   }
 
-  // Se o 2FA estiver desligado, autoriza diretamente
+  // Se o 2FA estiver desligado nas configurações, autoriza direto
   clearFailedAttempts(clientId);
   res.json({
     success: true,
-    require2FA: false
+    require2FA: false,
+    deviceTrusted: false
   });
 });
 
-// ETAPA 2: Validação do Código de 2FA
+// ETAPA 2: Validação do Código 2FA e Autorização Permanente do Dispositivo
 app.post('/api/auth/verify-2fa', (req, res) => {
   const clientId = getClientIdentifier(req);
-  const { challengeToken, code } = req.body || {};
+  const { challengeToken, code, deviceName } = req.body || {};
 
   const brute = checkBruteForce(clientId);
   if (!brute.allowed) {
@@ -286,7 +314,25 @@ app.post('/api/auth/verify-2fa', (req, res) => {
   if (inputCode === challenge.code || inputCode === backupMasterCode) {
     twoFactorChallenges.delete(challengeToken);
     clearFailedAttempts(clientId);
-    return res.json({ success: true });
+
+    // Registra este dispositivo como confiável permanentemente
+    const newDeviceToken = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    if (!Array.isArray(db.trustedDevices)) db.trustedDevices = [];
+
+    db.trustedDevices.push({
+      token: newDeviceToken,
+      name: deviceName || 'Navegador Autorizado',
+      ip: clientId,
+      authorizedAt: new Date().toISOString(),
+      lastUsedAt: new Date().toISOString()
+    });
+    saveDatabase(db);
+
+    return res.json({ 
+      success: true,
+      deviceToken: newDeviceToken,
+      deviceTrusted: true
+    });
   }
 
   // Código 2FA incorreto
@@ -305,6 +351,23 @@ app.post('/api/auth/verify-2fa', (req, res) => {
     error: `Código 2FA incorreto. Tente novamente ou use sua Chave Mestra. (${failInfo.attemptsLeft} tentativas restantes)`,
     attemptsLeft: failInfo.attemptsLeft
   });
+});
+
+// Desautorizar dispositivo atual
+app.post('/api/auth/revoke-device', (req, res) => {
+  const { deviceToken } = req.body || {};
+  if (deviceToken && Array.isArray(db.trustedDevices)) {
+    db.trustedDevices = db.trustedDevices.filter(d => d.token !== deviceToken);
+    saveDatabase(db);
+  }
+  res.json({ success: true });
+});
+
+// Desautorizar todos os dispositivos (forçar 2FA em todos)
+app.post('/api/auth/revoke-all-devices', (req, res) => {
+  db.trustedDevices = [];
+  saveDatabase(db);
+  res.json({ success: true });
 });
 
 // Reenvio do Código 2FA
