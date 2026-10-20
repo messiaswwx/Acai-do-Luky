@@ -54,6 +54,7 @@ export interface StoreSettings {
   estimatedTime: string;
   address: string;
   minOrderValue: number;
+  adminPin?: string;
 }
 
 export interface CartItem {

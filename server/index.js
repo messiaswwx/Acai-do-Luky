@@ -38,7 +38,8 @@ const DEFAULT_DATA = {
     deliveryFee: 5.00,
     estimatedTime: "30 - 45 min",
     address: "Atendimento Delivery & Retirada",
-    minOrderValue: 12.00
+    minOrderValue: 12.00,
+    adminPin: "1234"
   },
   menu: {
     sizes: [

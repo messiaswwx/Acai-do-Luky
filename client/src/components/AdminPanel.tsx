@@ -25,21 +25,26 @@ import {
   Check, 
   Save, 
   Clock, 
-  XCircle 
+  XCircle,
+  LogOut,
+  ExternalLink
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface AdminPanelProps {
   settings: StoreSettings;
   menu: MenuData;
   onUpdateSettings: (newSettings: StoreSettings) => Promise<void>;
   onUpdateMenu: (newMenu: MenuData) => Promise<void>;
+  onLogout?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   settings,
   menu,
   onUpdateSettings,
-  onUpdateMenu
+  onUpdateMenu,
+  onLogout
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'CONFIGURACOES'>('PEDIDOS');
@@ -291,6 +296,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <RefreshCw className="w-4 h-4" />
             <span>Atualizar</span>
           </button>
+
+          <Link
+            to="/"
+            target="_blank"
+            className="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Cardápio Cliente</span>
+          </Link>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              title="Sair do painel e bloquear acesso"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sair</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1038,6 +1063,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 onChange={e => setLocalSettings({ ...localSettings, address: e.target.value })}
                 className="w-full text-xs p-3 rounded-xl border border-slate-200"
               />
+            </div>
+
+            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-1.5">
+              <label className="block text-xs font-black text-purple-950">
+                PIN de Acesso do Painel (Senha de Login)
+              </label>
+              <input
+                type="text"
+                maxLength={20}
+                value={localSettings.adminPin || '1234'}
+                onChange={e => setLocalSettings({ ...localSettings, adminPin: e.target.value })}
+                placeholder="Ex: 1234"
+                className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white"
+              />
+              <span className="text-[10px] text-purple-700 block">
+                Esta senha é exigida na tela de login administrativo (/admin).
+              </span>
             </div>
 
             <button
