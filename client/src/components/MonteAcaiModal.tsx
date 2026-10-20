@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { SizeItem, BaseItem, FreeToppingItem, PremiumToppingItem, SyrupItem, CartItem, MenuData } from '../types';
 import { formatCurrency } from '../utils/format';
 import { isDiscountActive, getRemainingHoursText } from '../utils/promo';
@@ -12,24 +12,39 @@ interface MonteAcaiModalProps {
 }
 
 export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onClose, onAddToCart }) => {
-  const availableBases = menu.bases.filter(b => b.available);
+  // Prevent background page from scrolling & repainting while modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  const availableBases = useMemo(
+    () => menu.bases.filter(b => b.available),
+    [menu.bases]
+  );
+
   const [selectedBase, setSelectedBase] = useState<BaseItem>(availableBases[0] || menu.bases[0]);
   const [selectedFreeToppings, setSelectedFreeToppings] = useState<FreeToppingItem[]>([]);
   const [premiumToppingCounts, setPremiumToppingCounts] = useState<{ [id: string]: number }>({});
   const [selectedSyrups, setSelectedSyrups] = useState<SyrupItem[]>([]);
   const [notes, setNotes] = useState('');
 
-  const toggleFreeTopping = (topping: FreeToppingItem) => {
-    if (selectedFreeToppings.some(t => t.id === topping.id)) {
-      setSelectedFreeToppings(selectedFreeToppings.filter(t => t.id !== topping.id));
-    } else {
-      if (selectedFreeToppings.length < size.maxFreeToppings) {
-        setSelectedFreeToppings([...selectedFreeToppings, topping]);
+  const toggleFreeTopping = useCallback((topping: FreeToppingItem) => {
+    setSelectedFreeToppings(prev => {
+      if (prev.some(t => t.id === topping.id)) {
+        return prev.filter(t => t.id !== topping.id);
       }
-    }
-  };
+      if (prev.length < size.maxFreeToppings) {
+        return [...prev, topping];
+      }
+      return prev;
+    });
+  }, [size.maxFreeToppings]);
 
-  const updatePremiumCount = (toppingId: string, delta: number) => {
+  const updatePremiumCount = useCallback((toppingId: string, delta: number) => {
     setPremiumToppingCounts(prev => {
       const current = prev[toppingId] || 0;
       const next = Math.max(0, current + delta);
@@ -40,24 +55,27 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
       }
       return { ...prev, [toppingId]: next };
     });
-  };
+  }, []);
 
-  const toggleSyrup = (syrup: SyrupItem) => {
-    if (selectedSyrups.some(s => s.id === syrup.id)) {
-      setSelectedSyrups(selectedSyrups.filter(s => s.id !== syrup.id));
-    } else {
-      setSelectedSyrups([...selectedSyrups, syrup]);
-    }
-  };
+  const toggleSyrup = useCallback((syrup: SyrupItem) => {
+    setSelectedSyrups(prev => {
+      if (prev.some(s => s.id === syrup.id)) {
+        return prev.filter(s => s.id !== syrup.id);
+      }
+      return [...prev, syrup];
+    });
+  }, []);
 
-  const premiumTotal = Object.entries(premiumToppingCounts).reduce((acc, [id, qty]) => {
-    const item = menu.premiumToppings.find(p => p.id === id);
-    return acc + (item ? item.price * qty : 0);
-  }, 0);
+  const premiumTotal = useMemo(() => {
+    return Object.entries(premiumToppingCounts).reduce((acc, [id, qty]) => {
+      const item = menu.premiumToppings.find(p => p.id === id);
+      return acc + (item ? item.price * qty : 0);
+    }, 0);
+  }, [premiumToppingCounts, menu.premiumToppings]);
 
-  const unitPrice = size.price + premiumTotal;
+  const unitPrice = useMemo(() => size.price + premiumTotal, [size.price, premiumTotal]);
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     const premiumItems = Object.entries(premiumToppingCounts)
       .map(([id, quantity]) => {
         const item = menu.premiumToppings.find(p => p.id === id);
@@ -79,11 +97,17 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
 
     onAddToCart(cartItem);
     onClose();
-  };
+  }, [size, selectedBase, selectedFreeToppings, premiumToppingCounts, selectedSyrups, notes, unitPrice, menu.premiumToppings, onAddToCart, onClose]);
+
+  const isPromo = useMemo(() => isDiscountActive(size), [size]);
+  const remainingTime = useMemo(
+    () => isPromo ? getRemainingHoursText(size.discountExpiresAt) : null,
+    [isPromo, size.discountExpiresAt]
+  );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200/50">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 overscroll-contain">
+      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200/50 transform-gpu">
         {/* Modal Header */}
         <div className="relative bg-gradient-to-r from-[#471256] via-[#5c1c73] to-[#360942] text-white p-5 flex items-start justify-between border-b border-purple-800/40">
           <div className="flex items-center gap-3">
@@ -92,20 +116,21 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
               alt="Logo"
               className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-contain shrink-0 shadow-md"
               decoding="async"
+              loading="eager"
             />
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-amber-300 text-xs font-black uppercase tracking-wider">Montando seu açaí</span>
-                {isDiscountActive(size) && (
+                {isPromo && (
                   <>
-                    <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                    <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
                       <Flame className="w-2.5 h-2.5 fill-white" />
                       {size.discountPercent}% OFF
                     </span>
-                    {getRemainingHoursText(size.discountExpiresAt) && (
+                    {remainingTime && (
                       <span className="bg-purple-900 text-amber-300 border border-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
                         <Clock className="w-2.5 h-2.5 text-amber-400" />
-                        {getRemainingHoursText(size.discountExpiresAt)}
+                        {remainingTime}
                       </span>
                     )}
                   </>
@@ -123,8 +148,8 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           </button>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-6">
+        {/* Scrollable Content with hardware-accelerated scrolling and overscroll containment */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-6 overscroll-contain transform-gpu">
           {/* 1. Escolha a Base */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -135,17 +160,14 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
               <span className="text-xs text-purple-900 bg-purple-100 font-bold px-2 py-0.5 rounded-full">Obrigatório</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {menu.bases.map(base => (
+              {availableBases.map(base => (
                 <button
                   key={base.id}
-                  disabled={!base.available}
                   onClick={() => setSelectedBase(base)}
-                  className={`text-left p-3 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer ${
-                    !base.available 
-                      ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed'
-                      : selectedBase.id === base.id
-                        ? 'border-purple-700 bg-purple-50 text-purple-950 font-bold shadow-xs'
-                        : 'border-slate-200 hover:border-purple-300 text-slate-700'
+                  className={`text-left p-3 rounded-2xl border-2 transition-colors flex items-center justify-between cursor-pointer ${
+                    selectedBase.id === base.id
+                      ? 'border-purple-700 bg-purple-50 text-purple-950 font-bold shadow-xs'
+                      : 'border-slate-200 hover:border-purple-300 text-slate-700'
                   }`}
                 >
                   <span className="text-xs font-bold">{base.name}</span>
@@ -153,9 +175,6 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     <div className="w-5 h-5 rounded-full bg-purple-700 text-amber-300 flex items-center justify-center">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
-                  )}
-                  {!base.available && (
-                    <span className="text-[10px] uppercase font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Esgotado</span>
                   )}
                 </button>
               ))}
@@ -190,7 +209,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     key={topping.id}
                     disabled={!topping.available || isLimitReached}
                     onClick={() => toggleFreeTopping(topping)}
-                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
                       !topping.available
                         ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed'
                         : isSelected
@@ -291,7 +310,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     key={syrup.id}
                     disabled={!syrup.available}
                     onClick={() => toggleSyrup(syrup)}
-                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
                       !syrup.available
                         ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed'
                         : isSelected
@@ -324,7 +343,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
         </div>
 
         {/* Modal Footer with Live Price & Add Button */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4 transform-gpu">
           <div>
             <div className="text-[11px] text-slate-500 font-semibold uppercase">Total deste item</div>
             <div className="flex items-baseline gap-2">
@@ -339,7 +358,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
 
           <button
             onClick={handleConfirm}
-            className="flex-1 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-4 px-6 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+            className="flex-1 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-4 px-6 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-98 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
           >
             <Plus className="w-5 h-5 stroke-[3]" />
             <span>Adicionar à Sacola</span>
