@@ -82,7 +82,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200/50">
         {/* Modal Header */}
         <div className="relative bg-gradient-to-r from-[#471256] via-[#5c1c73] to-[#360942] text-white p-5 flex items-start justify-between border-b border-purple-800/40">
@@ -90,7 +90,8 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
             <img
               src="/logo.png"
               alt="Logo"
-              className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-cover shrink-0 shadow-md"
+              className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-contain shrink-0 shadow-md"
+              decoding="async"
             />
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">

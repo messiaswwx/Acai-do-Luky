@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { CartItem } from '../types';
 import { formatCurrency } from '../utils/format';
 import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
@@ -22,10 +22,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const subtotal = items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+  const subtotal = useMemo(
+    () => items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0),
+    [items]
+  );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
       <div className="bg-white w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
         {/* Header */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-purple-950 text-white">

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { SizeItem, CartItem, Order, MenuData, StoreSettings } from './types';
 import { formatCurrency } from './utils/format';
 import { isDiscountActive, getRemainingHoursText } from './utils/promo';
+import { getSocket } from './utils/socket';
 import { MonteAcaiModal } from './components/MonteAcaiModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -13,15 +14,14 @@ import {
   Sparkles, 
   Plus, 
   MessageCircle, 
-  Store,
-  Layers,
-  ChevronRight,
-  Heart,
-  Star,
-  Flame,
-  ShoppingBag
+  Store, 
+  Layers, 
+  ChevronRight, 
+  Heart, 
+  Star, 
+  Flame, 
+  ShoppingBag 
 } from 'lucide-react';
-import { io } from 'socket.io-client';
 
 const INITIAL_SETTINGS: StoreSettings = {
   storeName: "Açaí do Luky",
@@ -108,17 +108,17 @@ export default function App() {
   useEffect(() => {
     fetchData();
 
-    // Socket.io for live updates
-    const socket = io();
-    socket.on('settings_updated', (newSettings: StoreSettings) => {
-      setSettings(newSettings);
-    });
-    socket.on('menu_updated', (newMenu: MenuData) => {
-      setMenu(newMenu);
-    });
+    // Use shared singleton socket with proper listener cleanup
+    const socket = getSocket();
+    const handleSettingsUpdated = (newSettings: StoreSettings) => setSettings(newSettings);
+    const handleMenuUpdated = (newMenu: MenuData) => setMenu(newMenu);
+
+    socket.on('settings_updated', handleSettingsUpdated);
+    socket.on('menu_updated', handleMenuUpdated);
 
     return () => {
-      socket.disconnect();
+      socket.off('settings_updated', handleSettingsUpdated);
+      socket.off('menu_updated', handleMenuUpdated);
     };
   }, []);
 
@@ -152,12 +152,12 @@ export default function App() {
     }
   };
 
-  const handleAddToCart = (item: CartItem) => {
+  const handleAddToCart = useCallback((item: CartItem) => {
     setCartItems(prev => [...prev, item]);
     setIsCartOpen(true);
-  };
+  }, []);
 
-  const handleUpdateQuantity = (itemId: string, delta: number) => {
+  const handleUpdateQuantity = useCallback((itemId: string, delta: number) => {
     setCartItems(prev => {
       return prev
         .map(i => {
@@ -169,21 +169,21 @@ export default function App() {
         })
         .filter((i): i is CartItem => i !== null);
     });
-  };
+  }, []);
 
-  const handleRemoveItem = (itemId: string) => {
+  const handleRemoveItem = useCallback((itemId: string) => {
     setCartItems(prev => prev.filter(i => i.id !== itemId));
-  };
+  }, []);
 
-  const handleOrderSuccess = (order: Order) => {
+  const handleOrderSuccess = useCallback((order: Order) => {
     setCartItems([]);
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setActiveTrackingOrder(order);
-  };
+  }, []);
 
-  const totalCartCount = cartItems.reduce((acc, i) => acc + i.quantity, 0);
-  const totalCartPrice = cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+  const totalCartCount = useMemo(() => cartItems.reduce((acc, i) => acc + i.quantity, 0), [cartItems]);
+  const totalCartPrice = useMemo(() => cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0), [cartItems]);
 
   const getSizeBadge = (sizeId: string) => {
     switch (sizeId) {
@@ -257,10 +257,9 @@ export default function App() {
           <div className="space-y-6">
             {/* Super Styled Hero Card */}
             <div className="relative overflow-hidden bg-gradient-to-br from-[#471256] via-[#5c1c73] to-[#360942] text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-purple-800/40">
-              {/* Decorative Background Elements */}
-              <div className="absolute -right-8 -bottom-8 w-64 h-64 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute right-32 -top-12 w-48 h-48 bg-purple-400/20 rounded-full blur-2xl pointer-events-none" />
-              <div className="absolute left-1/3 bottom-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+              {/* Subtle Decorative Elements without expensive blur rasterization */}
+              <div className="absolute -right-8 -bottom-8 w-48 h-48 rounded-full bg-amber-400/10 pointer-events-none" />
+              <div className="absolute right-20 -top-8 w-36 h-36 rounded-full bg-purple-400/15 pointer-events-none" />
 
               <div className="relative z-10 space-y-5">
                 {/* Store Status & Direct Contact */}
@@ -512,7 +511,7 @@ export default function App() {
 
       {/* Floating Bottom Cart Bar for Customers */}
       {viewMode === 'CLIENTE' && totalCartCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-white via-white/95 to-transparent backdrop-blur-xs flex justify-center">
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-white via-white/95 to-transparent flex justify-center">
           <div className="max-w-md w-full">
             <button
               onClick={() => setIsCartOpen(true)}

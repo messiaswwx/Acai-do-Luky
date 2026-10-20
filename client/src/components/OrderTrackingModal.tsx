@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { Order, StoreSettings } from '../types';
 import { formatCurrency, formatDateTime, generateWhatsAppMessage } from '../utils/format';
+import { getSocket } from '../utils/socket';
 import { CheckCircle2, Clock, Bike, MessageCircle, Store, ChefHat, Copy, Check } from 'lucide-react';
-import { io } from 'socket.io-client';
 
 interface OrderTrackingModalProps {
   order: Order;
@@ -21,23 +21,27 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [copiedPix, setCopiedPix] = useState(false);
 
   useEffect(() => {
-    const socket = io();
+    const socket = getSocket();
     socket.emit('track_order', order.id);
 
-    socket.on('my_order_update', (updated: Order) => {
+    const handleMyOrder = (updated: Order) => {
       if (updated.id === order.id) {
         setOrder(updated);
       }
-    });
+    };
 
-    socket.on('order_status_updated', (updated: Order) => {
+    const handleOrderStatus = (updated: Order) => {
       if (updated.id === order.id) {
         setOrder(updated);
       }
-    });
+    };
+
+    socket.on('my_order_update', handleMyOrder);
+    socket.on('order_status_updated', handleOrderStatus);
 
     return () => {
-      socket.disconnect();
+      socket.off('my_order_update', handleMyOrder);
+      socket.off('order_status_updated', handleOrderStatus);
     };
   }, [order.id]);
 
@@ -66,15 +70,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-purple-200">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white w-full max-w-lg rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#471256] via-[#5c1c73] to-[#360942] text-white p-6 text-center relative border-b border-purple-800">
           <div className="flex justify-center mb-2">
             <img
               src="/logo.png"
               alt="Logo"
-              className="w-14 h-14 rounded-full border-2 border-amber-400 bg-white object-cover shadow-lg"
+              className="w-14 h-14 rounded-full border-2 border-amber-400 bg-white object-contain shadow-lg"
+              loading="eager"
+              decoding="async"
             />
           </div>
           <span className="bg-amber-400 text-purple-950 text-[11px] uppercase px-3 py-1 rounded-full font-black inline-block mb-1 shadow-xs">
@@ -95,7 +101,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
             <div className="relative flex items-center justify-between px-2">
               <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1 bg-slate-200 -z-0">
                 <div
-                  className="h-full bg-emerald-500 transition-all duration-500"
+                  className="h-full bg-emerald-500 transition-all duration-300"
                   style={{ width: `${((step - 1) / 3) * 100}%` }}
                 />
               </div>

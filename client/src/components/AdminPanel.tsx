@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Order, OrderStatus, StoreSettings, MenuData } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
 import { playOrderAlert } from '../utils/audio';
 import { getRemainingHoursText } from '../utils/promo';
+import { getSocket } from '../utils/socket';
 import { PrintReceipt } from './PrintReceipt';
 import { 
   Bell, 
@@ -26,7 +27,6 @@ import {
   Clock, 
   XCircle 
 } from 'lucide-react';
-import { io } from 'socket.io-client';
 
 interface AdminPanelProps {
   settings: StoreSettings;
@@ -74,26 +74,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const soundEnabledRef = useRef(soundEnabled);
+  soundEnabledRef.current = soundEnabled;
+
   useEffect(() => {
     loadOrders();
+    const socket = getSocket();
 
-    const socket = io();
-
-    socket.on('new_order', (newOrder: Order) => {
+    const handleNewOrder = (newOrder: Order) => {
       setOrders(prev => [newOrder, ...prev]);
-      if (soundEnabled) {
+      if (soundEnabledRef.current) {
         playOrderAlert();
       }
-    });
+    };
 
-    socket.on('order_status_updated', (updated: Order) => {
+    const handleOrderStatus = (updated: Order) => {
       setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-    });
+    };
+
+    socket.on('new_order', handleNewOrder);
+    socket.on('order_status_updated', handleOrderStatus);
 
     return () => {
-      socket.disconnect();
+      socket.off('new_order', handleNewOrder);
+      socket.off('order_status_updated', handleOrderStatus);
     };
-  }, [soundEnabled]);
+  }, []);
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
@@ -218,18 +224,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSavingSettings(false);
   };
 
-  // Metrics
-  const todayOrders = orders;
-  const totalRevenue = todayOrders
-    .filter(o => o.status !== 'CANCELADO')
-    .reduce((acc, o) => acc + o.total, 0);
-  const pendingOrders = orders.filter(o => o.status === 'NOVO');
-  const inPrepOrders = orders.filter(o => o.status === 'PREPARANDO');
+  // Memoized Metrics to avoid unnecessary recomputations when typing in price inputs
+  const totalRevenue = useMemo(() => {
+    return orders
+      .filter(o => o.status !== 'CANCELADO')
+      .reduce((acc, o) => acc + o.total, 0);
+  }, [orders]);
 
-  const filteredOrders = orders.filter(o => {
-    if (filterStatus === 'TODOS') return true;
-    return o.status === filterStatus;
-  });
+  const pendingOrders = useMemo(() => orders.filter(o => o.status === 'NOVO'), [orders]);
+  const inPrepOrders = useMemo(() => orders.filter(o => o.status === 'PREPARANDO'), [orders]);
+
+  const filteredOrders = useMemo(() => {
+    if (filterStatus === 'TODOS') return orders;
+    return orders.filter(o => o.status === filterStatus);
+  }, [orders, filterStatus]);
 
   return (
     <div className="space-y-6">
