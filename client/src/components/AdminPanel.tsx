@@ -344,6 +344,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (localSettings.adminPin && localSettings.adminPin !== 'PROTEGIDO' && localSettings.adminPin.length < 4) {
+      alert('O PIN deve conter no mínimo 4 números.');
+      return;
+    }
     setSavingSettings(true);
     await onUpdateSettings(localSettings);
     setSavingSettings(false);
@@ -1517,26 +1521,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   PIN de Acesso Principal (Senha do Painel)
                 </label>
                 <input
                   type="text"
                   maxLength={10}
-                  value={localSettings.adminPin || '1234'}
+                  value={localSettings.adminPin ?? ''}
                   onChange={e => setLocalSettings({ ...localSettings, adminPin: e.target.value.replace(/\D/g, '') })}
                   placeholder="Ex: 1234"
-                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white"
+                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
-                <span className="text-[10px] text-purple-700 block mt-1">
+                <span className="text-[10px] text-purple-700 dark:text-purple-400 block mt-1">
                   Exigido na primeira etapa de login do /admin.
                 </span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-purple-200">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-purple-200 dark:border-purple-800">
                 <div>
-                  <span className="text-xs font-bold text-slate-900 block">Exigir 2FA (Verificação em 2 Etapas)</span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white block">Exigir 2FA (Verificação em 2 Etapas)</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Gera um código de 6 dígitos no WhatsApp além do PIN
                   </span>
                 </div>
@@ -1544,7 +1548,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="button"
                   onClick={() => setLocalSettings({ ...localSettings, twoFactorEnabled: !localSettings.twoFactorEnabled })}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                    localSettings.twoFactorEnabled !== false ? 'bg-purple-800 text-white' : 'bg-slate-200 text-slate-700'
+                    localSettings.twoFactorEnabled !== false ? 'bg-purple-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
                   }`}
                 >
                   {localSettings.twoFactorEnabled !== false ? 'Ativado' : 'Desativado'}
@@ -1552,18 +1556,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Chave Mestra de Backup 2FA (Emergência)
                 </label>
                 <input
                   type="text"
                   maxLength={10}
-                  value={localSettings.twoFactorBackupCode || '998877'}
+                  value={localSettings.twoFactorBackupCode ?? ''}
                   onChange={e => setLocalSettings({ ...localSettings, twoFactorBackupCode: e.target.value.replace(/\D/g, '') })}
                   placeholder="Ex: 998877"
-                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 bg-white font-mono"
+                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
                 />
-                <span className="text-[10px] text-purple-700 block mt-1">
+                <span className="text-[10px] text-purple-700 dark:text-purple-400 block mt-1">
                   Código fixo de emergência caso você não tenha acesso ao WhatsApp no momento.
                 </span>
               </div>
