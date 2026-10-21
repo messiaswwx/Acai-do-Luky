@@ -4,6 +4,7 @@ import { formatCurrency } from '../utils/format';
 import { X, Bike, Store, QrCode, CreditCard, Banknote, Copy, Check, ArrowLeft, Send } from 'lucide-react';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { createOrder } from '../services/supabaseService';
+import { sanitizeText, sanitizePhone } from '../utils/sanitize';
 
 interface CheckoutModalProps {
   items: CartItem[];
@@ -87,15 +88,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       const orderPayload = {
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
+        customerName: sanitizeText(customerName),
+        customerPhone: sanitizePhone(customerPhone),
         orderType,
         address: orderType === 'ENTREGA' ? {
-          street: street.trim(),
-          number: number.trim(),
-          neighborhood: neighborhood.trim(),
-          complement: complement.trim(),
-          reference: reference.trim()
+          street: sanitizeText(street),
+          number: sanitizeText(number),
+          neighborhood: sanitizeText(neighborhood),
+          complement: sanitizeText(complement),
+          reference: sanitizeText(reference)
         } : undefined,
         items,
         paymentMethod,

@@ -19,7 +19,18 @@ const io = new Server(server, {
 });
 
 app.use(cors());
-app.use(express.json());
+
+// Headers de Segurança HTTP (Proteção contra clickjacking, MIME sniffing e XSS)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Limite de payload para impedir ataques de DoS por sobrecarga de memória
+app.use(express.json({ limit: '50kb' }));
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
