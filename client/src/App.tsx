@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { SizeItem, CartItem, Order, MenuData, StoreSettings } from './types';
 import { formatCurrency } from './utils/format';
 import { isDiscountActive, getRemainingHoursText } from './utils/promo';
@@ -24,8 +24,7 @@ import {
   Heart, 
   Star, 
   Flame, 
-  ShoppingBag,
-  Lock
+  ShoppingBag
 } from 'lucide-react';
 
 const INITIAL_SETTINGS: StoreSettings = {
@@ -559,18 +558,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Footer Discreto para Acesso do Lojista */}
-                <footer className="pt-8 pb-4 text-center border-t border-purple-200/60 space-y-2">
+                {/* Footer */}
+                <footer className="pt-8 pb-4 text-center border-t border-purple-200/60">
                   <p className="text-xs text-slate-400 font-medium">
                     © {new Date().getFullYear()} {settings.storeName} - Todos os direitos reservados.
                   </p>
-                  <Link
-                    to="/admin"
-                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-800/60 hover:text-purple-950 transition-colors"
-                  >
-                    <Lock className="w-3 h-3" />
-                    <span>Área do Lojista (Painel Administrativo)</span>
-                  </Link>
                 </footer>
               </main>
 
