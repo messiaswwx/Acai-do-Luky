@@ -87,10 +87,39 @@ const INITIAL_MENU: MenuData = {
   ]
 };
 
+const CACHED_SETTINGS_KEY = 'luky_cached_settings';
+const CACHED_MENU_KEY = 'luky_cached_menu';
+
+function getInitialStoreSettings(): StoreSettings {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(CACHED_SETTINGS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+  }
+  return INITIAL_SETTINGS;
+}
+
+function getInitialMenuData(): MenuData {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(CACHED_MENU_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+  }
+  return INITIAL_MENU;
+}
+
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
-  const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
-  const [menu, setMenu] = useState<MenuData>(INITIAL_MENU);
+  const [settings, setSettings] = useState<StoreSettings>(getInitialStoreSettings);
+  const [menu, setMenu] = useState<MenuData>(getInitialMenuData);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem(CACHED_SETTINGS_KEY);
+    }
+    return true;
+  });
 
   // Admin Auth State: Exige o PIN toda vez que entra na aba de admin (desbloqueio por sessão/aba)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -112,8 +141,15 @@ export default function App() {
           fetchStoreSettings(),
           fetchMenuData()
         ]);
-        if (supSettings) setSettings(supSettings);
-        if (supMenu) setMenu(supMenu);
+        if (supSettings) {
+          setSettings(supSettings);
+          localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(supSettings));
+        }
+        if (supMenu) {
+          setMenu(supMenu);
+          localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(supMenu));
+        }
+        setIsInitialLoading(false);
         return;
       }
 
@@ -124,13 +160,17 @@ export default function App() {
       if (resSettings.ok) {
         const dataSettings = await resSettings.json();
         setSettings(dataSettings);
+        localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(dataSettings));
       }
       if (resMenu.ok) {
         const dataMenu = await resMenu.json();
         setMenu(dataMenu);
+        localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(dataMenu));
       }
+      setIsInitialLoading(false);
     } catch {
       console.warn('Backend inicializando, usando dados padrão.');
+      setIsInitialLoading(false);
     }
   };
 
@@ -158,9 +198,11 @@ export default function App() {
     if (isSupabaseConfigured) {
       const unsubSettings = subscribeToStoreSettings(newSettings => {
         setSettings(newSettings);
+        localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(newSettings));
       });
       const unsubMenu = subscribeToMenuData(newMenu => {
         setMenu(newMenu);
+        localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(newMenu));
       });
       return () => {
         unsubSettings();
@@ -169,8 +211,14 @@ export default function App() {
     }
 
     const socket = getSocket();
-    const handleSettingsUpdated = (newSettings: StoreSettings) => setSettings(newSettings);
-    const handleMenuUpdated = (newMenu: MenuData) => setMenu(newMenu);
+    const handleSettingsUpdated = (newSettings: StoreSettings) => {
+      setSettings(newSettings);
+      localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(newSettings));
+    };
+    const handleMenuUpdated = (newMenu: MenuData) => {
+      setMenu(newMenu);
+      localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(newMenu));
+    };
 
     socket.on('settings_updated', handleSettingsUpdated);
     socket.on('menu_updated', handleMenuUpdated);
@@ -183,6 +231,7 @@ export default function App() {
 
   const handleUpdateSettings = async (newSettings: StoreSettings) => {
     setSettings(newSettings);
+    localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(newSettings));
     if (isSupabaseConfigured) {
       await saveStoreSettings(newSettings);
     }
@@ -199,6 +248,7 @@ export default function App() {
 
   const handleUpdateMenu = async (newMenu: MenuData) => {
     setMenu(newMenu);
+    localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(newMenu));
     if (isSupabaseConfigured) {
       await saveMenuData(newMenu);
     }
@@ -337,7 +387,7 @@ export default function App() {
               {/* Conteúdo Principal do Cliente */}
               <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 space-y-6">
                 {/* Alerta de Loja Fechada */}
-                {!settings.isOpen && (
+                {!isInitialLoading && !settings.isOpen && (
                   <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-3xl shadow-xl border border-red-500/50 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center gap-3.5 text-center sm:text-left">
                       <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
@@ -369,14 +419,21 @@ export default function App() {
                     {/* Status & WhatsApp */}
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs px-3 py-1 rounded-full font-black flex items-center gap-1.5 shadow-sm ${
-                          settings.isOpen 
-                            ? 'bg-emerald-500 text-white' 
-                            : 'bg-red-500 text-white'
-                        }`}>
-                          <span className={`w-2 h-2 rounded-full ${settings.isOpen ? 'bg-white animate-ping' : 'bg-white'}`} />
-                          {settings.isOpen ? 'ABERTO AGORA' : 'FECHADO NO MOMENTO'}
-                        </span>
+                        {isInitialLoading ? (
+                          <span className="bg-purple-900/60 text-purple-200 border border-purple-400/30 text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                            <Clock className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Verificando loja...</span>
+                          </span>
+                        ) : (
+                          <span className={`text-xs px-3 py-1 rounded-full font-black flex items-center gap-1.5 shadow-sm ${
+                            settings.isOpen 
+                              ? 'bg-emerald-500 text-white' 
+                              : 'bg-red-500 text-white'
+                          }`}>
+                            <span className={`w-2 h-2 rounded-full ${settings.isOpen ? 'bg-white animate-ping' : 'bg-white'}`} />
+                            {settings.isOpen ? 'ABERTO AGORA' : 'FECHADO NO MOMENTO'}
+                          </span>
+                        )}
 
                         <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs px-2.5 py-1 rounded-full font-bold hidden sm:flex items-center gap-1">
                           <Sparkles className="w-3 h-3 text-amber-400" />
