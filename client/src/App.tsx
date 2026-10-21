@@ -4,6 +4,8 @@ import type { SizeItem, CartItem, Order, MenuData, StoreSettings } from './types
 import { formatCurrency } from './utils/format';
 import { isDiscountActive, getRemainingHoursText } from './utils/promo';
 import { getSocket } from './utils/socket';
+import { useTheme } from './utils/theme';
+import { ThemeToggle } from './components/ThemeToggle';
 import { MonteAcaiModal } from './components/MonteAcaiModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -79,6 +81,7 @@ const INITIAL_MENU: MenuData = {
 };
 
 export default function App() {
+  const { isDark, toggleTheme } = useTheme();
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
   const [menu, setMenu] = useState<MenuData>(INITIAL_MENU);
 
@@ -262,7 +265,7 @@ export default function App() {
         <Route
           path="/"
           element={
-            <div className="min-h-screen bg-gradient-to-b from-purple-50/50 via-slate-50 to-purple-50/30 flex flex-col font-sans">
+            <div className="min-h-screen bg-gradient-to-b from-purple-50/50 via-slate-50 to-purple-50/30 dark:from-slate-950 dark:via-purple-950/20 dark:to-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
               {/* Header do Cliente (100% focado na experiência de compra) */}
               <header className="bg-purple-950 text-slate-200 text-xs py-2.5 px-4 border-b border-purple-900/60 sticky top-0 z-40 shadow-md">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -280,6 +283,9 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* Botão de Tema Escuro / Claro */}
+                    <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+
                     {/* Botão para rastrear pedido ativo caso o cliente já tenha feito um */}
                     {activeTrackingOrder && (
                       <button
@@ -400,14 +406,14 @@ export default function App() {
                 </div>
 
                 {/* Banner: Como pedir */}
-                <div className="bg-white rounded-2xl p-4 border border-purple-200/80 shadow-xs flex items-center justify-between gap-3">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-purple-200/80 dark:border-purple-900/40 shadow-xs flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-purple-700 text-amber-300 flex items-center justify-center shrink-0 shadow-sm">
                       <Layers className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-900 text-sm">Monte o seu Açaí em 4 Passos:</h4>
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <h4 className="font-black text-slate-900 dark:text-white text-sm">Monte o seu Açaí em 4 Passos:</h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                         1. Escolha o tamanho ➔ 2. Selecione a base ➔ 3. Escolha os acompanhamentos ➔ 4. Receba em casa!
                       </p>
                     </div>
@@ -418,13 +424,13 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                      <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
                         <Flame className="w-6 h-6 text-amber-500 fill-amber-500" />
                         Escolha o Tamanho Perfeito
                       </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">Todos os copos acompanham recheio grátis</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Todos os copos acompanham recheio grátis</p>
                     </div>
-                    <span className="text-xs font-black text-purple-800 bg-purple-100 px-3 py-1 rounded-full">
+                    <span className="text-xs font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-3 py-1 rounded-full border border-purple-200 dark:border-purple-900/50">
                       A partir de R$ 14,00
                     </span>
                   </div>
@@ -442,14 +448,14 @@ export default function App() {
                       return (
                         <div
                           key={size.id}
-                          className={`relative bg-white rounded-3xl p-5 border-2 transition-all flex flex-col justify-between ${
+                          className={`relative bg-white dark:bg-slate-900 rounded-3xl p-5 border-2 transition-all flex flex-col justify-between ${
                             !size.available
-                              ? 'border-slate-200 opacity-60'
+                              ? 'border-slate-200 dark:border-slate-800 opacity-60'
                               : isPromo
                                 ? 'border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/30'
                                 : isTopSeller
                                   ? 'border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/20'
-                                  : 'border-slate-200 hover:border-purple-400 hover:shadow-lg'
+                                  : 'border-slate-200 dark:border-slate-800 hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-lg'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 mb-3">
@@ -474,7 +480,7 @@ export default function App() {
                               )}
                             </div>
 
-                            <span className="text-xs font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                            <span className="text-xs font-bold text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-100 dark:border-purple-900/50">
                               {size.maxFreeToppings} acomp. inclusos
                             </span>
                           </div>
@@ -482,9 +488,9 @@ export default function App() {
                           <div className="space-y-2 mb-4">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <h3 className="font-black text-slate-900 text-xl tracking-tight">{size.name}</h3>
+                                <h3 className="font-black text-slate-900 dark:text-white text-xl tracking-tight">{size.name}</h3>
                                 {isPromo && (
-                                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block mt-0.5">
+                                  <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 inline-block mt-0.5">
                                     Economize {formatCurrency(savings)}
                                   </span>
                                 )}
@@ -492,7 +498,7 @@ export default function App() {
 
                               <div className="text-right flex flex-col items-end">
                                 {isPromo && (
-                                  <span className="line-through text-xs font-bold text-slate-400">
+                                  <span className="line-through text-xs font-bold text-slate-400 dark:text-slate-500">
                                     {formatCurrency(basePrice)}
                                   </span>
                                 )}
@@ -502,11 +508,11 @@ export default function App() {
                               </div>
                             </div>
 
-                            <p className="text-xs text-slate-500 leading-relaxed">{size.description}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{size.description}</p>
                           </div>
 
-                          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                               Customizável
                             </span>
 
@@ -518,7 +524,7 @@ export default function App() {
                                   ? isPromo || isTopSeller
                                     ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 shadow-md shadow-amber-500/20 active:scale-98'
                                     : 'bg-purple-700 hover:bg-purple-800 text-white shadow-md shadow-purple-900/20 active:scale-98'
-                                  : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                               }`}
                             >
                               <Plus className="w-4 h-4 stroke-[3]" />
@@ -533,25 +539,25 @@ export default function App() {
 
                 {/* Badges de Confiança */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="bg-white p-5 rounded-3xl border border-purple-200/80 shadow-xs flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
-                      <Store className="w-7 h-7 text-purple-900" />
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-purple-200/80 dark:border-purple-900/40 shadow-xs flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
+                      <Store className="w-7 h-7 text-purple-900 dark:text-amber-300" />
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-900 text-sm">Direto com o Luky</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <h4 className="font-black text-slate-900 dark:text-white text-sm">Direto com o Luky</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         Sem intermediários ou taxas abusivas. Açaí mais barato, com mais fartura e preparado na hora!
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-white p-5 rounded-3xl border border-purple-200/80 shadow-xs flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 shadow-xs">
-                      <Sparkles className="w-7 h-7 text-purple-800" />
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-purple-200/80 dark:border-purple-900/40 shadow-xs flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 shadow-xs">
+                      <Sparkles className="w-7 h-7 text-purple-800 dark:text-purple-300" />
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-900 text-sm">Ingredientes Selecionados</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <h4 className="font-black text-slate-900 dark:text-white text-sm">Ingredientes Selecionados</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         Frutas frescas do dia, Leite Ninho original, Nutella pura e caldas irresistíveis.
                       </p>
                     </div>
@@ -559,8 +565,8 @@ export default function App() {
                 </div>
 
                 {/* Footer */}
-                <footer className="pt-8 pb-4 text-center border-t border-purple-200/60">
-                  <p className="text-xs text-slate-400 font-medium">
+                <footer className="pt-8 pb-4 text-center border-t border-purple-200/60 dark:border-purple-900/40">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                     © {new Date().getFullYear()} {settings.storeName} - Todos os direitos reservados.
                   </p>
                 </footer>
@@ -568,7 +574,7 @@ export default function App() {
 
               {/* Floating Bottom Cart Bar */}
               {totalCartCount > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-white via-white/95 to-transparent flex justify-center">
+                <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-950 dark:via-slate-950/95 dark:to-transparent flex justify-center">
                   <div className="max-w-md w-full">
                     <button
                       onClick={() => setIsCartOpen(true)}
@@ -648,7 +654,7 @@ export default function App() {
           path="/admin"
           element={
             isAdminAuthenticated ? (
-              <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
                 <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20">
                   <AdminPanel
                     settings={settings}
@@ -656,6 +662,8 @@ export default function App() {
                     onUpdateSettings={handleUpdateSettings}
                     onUpdateMenu={handleUpdateMenu}
                     onLogout={handleAdminLogout}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
                   />
                 </main>
               </div>
@@ -663,6 +671,8 @@ export default function App() {
               <AdminLogin
                 expectedPin={settings.adminPin || '1234'}
                 onLoginSuccess={() => setIsAdminAuthenticated(true)}
+                isDark={isDark}
+                onToggleTheme={toggleTheme}
               />
             )
           }

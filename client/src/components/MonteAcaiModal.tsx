@@ -106,8 +106,8 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 overscroll-contain">
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200/50 transform-gpu">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overscroll-contain">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200/50 dark:border-purple-900/40 transform-gpu">
         {/* Modal Header */}
         <div className="relative bg-gradient-to-r from-[#471256] via-[#5c1c73] to-[#360942] text-white p-5 flex items-start justify-between border-b border-purple-800/40">
           <div className="flex items-center gap-3">
@@ -153,11 +153,11 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           {/* 1. Escolha a Base */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="bg-purple-900 text-amber-300 text-xs w-6 h-6 rounded-full flex items-center justify-center font-black">1</span>
                 <span>Escolha a Base</span>
               </h3>
-              <span className="text-xs text-purple-900 bg-purple-100 font-bold px-2 py-0.5 rounded-full">Obrigatório</span>
+              <span className="text-xs text-purple-900 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 font-bold px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-900/50">Obrigatório</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableBases.map(base => (
@@ -166,13 +166,13 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                   onClick={() => setSelectedBase(base)}
                   className={`text-left p-3 rounded-2xl border-2 transition-colors flex items-center justify-between cursor-pointer ${
                     selectedBase.id === base.id
-                      ? 'border-purple-700 bg-purple-50 text-purple-950 font-bold shadow-xs'
-                      : 'border-slate-200 hover:border-purple-300 text-slate-700'
+                      ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 font-bold shadow-xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/60'
                   }`}
                 >
                   <span className="text-xs font-bold">{base.name}</span>
                   {selectedBase.id === base.id && (
-                    <div className="w-5 h-5 rounded-full bg-purple-700 text-amber-300 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full bg-purple-700 dark:bg-purple-600 text-amber-300 flex items-center justify-center">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   )}
@@ -184,19 +184,19 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           {/* 2. Acompanhamentos Gratuitos */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="bg-purple-900 text-amber-300 text-xs w-6 h-6 rounded-full flex items-center justify-center font-black">2</span>
                 <span>Acompanhamentos Grátis</span>
               </h3>
               <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
                 selectedFreeToppings.length === size.maxFreeToppings 
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-900'
+                  ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
               }`}>
                 {selectedFreeToppings.length} de {size.maxFreeToppings} inclusos
               </span>
             </div>
-            <p className="text-xs text-slate-500 mb-2.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2.5">
               Escolha até {size.maxFreeToppings} acompanhamentos sem custo extra:
             </p>
             <div className="grid grid-cols-2 gap-2">
@@ -211,19 +211,19 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     onClick={() => toggleFreeTopping(topping)}
                     className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
                       !topping.available
-                        ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/40 text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'
                         : isSelected
-                          ? 'border-purple-600 bg-purple-50 text-purple-900 font-black shadow-xs'
+                          ? 'border-purple-600 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-900 dark:text-purple-200 font-black shadow-xs'
                           : isLimitReached
-                            ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed'
-                            : 'border-slate-200 hover:border-purple-300 text-slate-700'
+                            ? 'border-slate-100 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/60'
                     }`}
                   >
                     <span className="truncate mr-1">{topping.name}</span>
                     {isSelected ? (
-                      <Check className="w-4 h-4 text-purple-700 stroke-[3] shrink-0" />
+                      <Check className="w-4 h-4 text-purple-700 dark:text-purple-400 stroke-[3] shrink-0" />
                     ) : (
-                      <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0" />
+                      <div className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-600 shrink-0" />
                     )}
                   </button>
                 );
@@ -234,15 +234,15 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           {/* 3. Adicionais Premium (Pagos) */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="bg-amber-400 text-purple-950 text-xs w-6 h-6 rounded-full flex items-center justify-center font-black">3</span>
                 <span>Adicionais Especiais</span>
               </h3>
-              <span className="text-xs text-amber-800 bg-amber-100 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-600" /> Opcional
+              <span className="text-xs text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200 dark:border-amber-800">
+                <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Opcional
               </span>
             </div>
-            <p className="text-xs text-slate-500 mb-2.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2.5">
               Chocolates e doses extras para turbinar o seu açaí:
             </p>
             <div className="space-y-2">
@@ -253,15 +253,15 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     key={item.id}
                     className={`p-3 rounded-2xl border flex items-center justify-between transition-colors ${
                       !item.available
-                        ? 'border-slate-200 bg-slate-50 opacity-60'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 opacity-60'
                         : count > 0
-                          ? 'border-amber-400 bg-amber-50/70 shadow-xs'
-                          : 'border-slate-200'
+                          ? 'border-amber-400 dark:border-amber-500 bg-amber-50/70 dark:bg-amber-950/30 shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/60'
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-slate-900 text-xs">{item.name}</div>
-                      <div className="text-xs font-black text-amber-600">+{formatCurrency(item.price)}</div>
+                      <div className="font-bold text-slate-900 dark:text-white text-xs">{item.name}</div>
+                      <div className="text-xs font-black text-amber-600 dark:text-amber-400">+{formatCurrency(item.price)}</div>
                     </div>
 
                     {!item.available ? (
@@ -272,11 +272,11 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                           <>
                             <button
                               onClick={() => updatePremiumCount(item.id, -1)}
-                              className="w-7 h-7 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 flex items-center justify-center text-slate-700 shadow-xs cursor-pointer"
+                              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 shadow-xs cursor-pointer"
                             >
                               <Minus className="w-3.5 h-3.5" />
                             </button>
-                            <span className="w-4 text-center font-black text-purple-950 text-sm">{count}</span>
+                            <span className="w-4 text-center font-black text-purple-950 dark:text-amber-300 text-sm">{count}</span>
                           </>
                         )}
                         <button
@@ -296,11 +296,11 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           {/* 4. Caldas / Coberturas */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="bg-purple-900 text-amber-300 text-xs w-6 h-6 rounded-full flex items-center justify-center font-black">4</span>
                 <span>Caldas & Coberturas</span>
               </h3>
-              <span className="text-xs text-emerald-800 bg-emerald-100 font-bold px-2 py-0.5 rounded-full">Grátis</span>
+              <span className="text-xs text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">Grátis</span>
             </div>
             <div className="grid grid-cols-2 gap-2 mt-2">
               {menu.syrups.map(syrup => {
@@ -312,14 +312,14 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
                     onClick={() => toggleSyrup(syrup)}
                     className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
                       !syrup.available
-                        ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/40 opacity-50 cursor-not-allowed'
                         : isSelected
-                          ? 'border-purple-700 bg-purple-50 text-purple-900 font-black'
-                          : 'border-slate-200 hover:border-purple-200 text-slate-700'
+                          ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-900 dark:text-purple-200 font-black'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-purple-200 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/60'
                     }`}
                   >
                     <span className="truncate">{syrup.name}</span>
-                    {isSelected && <Check className="w-4 h-4 text-purple-700 stroke-[3] shrink-0" />}
+                    {isSelected && <Check className="w-4 h-4 text-purple-700 dark:text-purple-400 stroke-[3] shrink-0" />}
                   </button>
                 );
               })}
@@ -328,7 +328,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
 
           {/* 5. Observações */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               Alguma observação para o Luky?
             </label>
             <input
@@ -336,20 +336,20 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
               placeholder="Ex: Leite condensado no fundo, capricha no leite ninho..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-hidden focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+              className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-hidden focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
               maxLength={120}
             />
           </div>
         </div>
 
         {/* Modal Footer with Live Price & Add Button */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4 transform-gpu">
+        <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 transform-gpu">
           <div>
-            <div className="text-[11px] text-slate-500 font-semibold uppercase">Total deste item</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Total deste item</div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-purple-950">{formatCurrency(unitPrice)}</span>
+              <span className="text-2xl font-black text-purple-950 dark:text-amber-400">{formatCurrency(unitPrice)}</span>
               {(size.discountPercent || 0) > 0 && (size.originalPrice || size.price) > size.price && (
-                <span className="line-through text-xs font-bold text-slate-400">
+                <span className="line-through text-xs font-bold text-slate-400 dark:text-slate-500">
                   {formatCurrency((size.originalPrice || size.price) + premiumTotal)}
                 </span>
               )}

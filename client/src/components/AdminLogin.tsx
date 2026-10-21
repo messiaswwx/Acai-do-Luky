@@ -3,17 +3,22 @@ import { Lock, Eye, EyeOff, ArrowLeft, KeyRound, Smartphone, RefreshCw, CheckCir
 import { Link } from 'react-router-dom';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { adminLoginRPC, adminVerify2FARPC } from '../services/supabaseService';
+import { ThemeToggle } from './ThemeToggle';
 
 interface AdminLoginProps {
   expectedPin?: string;
   onLoginSuccess: () => void;
+  isDark?: boolean;
+  onToggleTheme?: () => void;
 }
 
 const DEVICE_TOKEN_KEY = 'luky_device_token';
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({
   expectedPin = '1234',
-  onLoginSuccess
+  onLoginSuccess,
+  isDark = false,
+  onToggleTheme
 }) => {
   // Step: 'PIN' | '2FA'
   const [step, setStep] = useState<'PIN' | '2FA'>('PIN');
@@ -278,8 +283,23 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   )}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#320740] via-[#481258] to-[#250330] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 border border-purple-200/60 animate-in fade-in zoom-in-95 duration-200">
+    <div className="min-h-screen bg-gradient-to-b from-[#320740] via-[#481258] to-[#250330] flex flex-col items-center justify-center p-4 relative">
+      {/* Top Bar with Return & Theme Toggle */}
+      <div className="w-full max-w-md flex items-center justify-between mb-4 px-2">
+        <Link
+          to="/"
+          className="text-xs font-bold text-purple-200 hover:text-white flex items-center gap-1.5 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Voltar para o Cardápio</span>
+        </Link>
+
+        {onToggleTheme && (
+          <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
+        )}
+      </div>
+
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 border border-purple-200/60 dark:border-purple-900/40 text-slate-800 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-200">
         
         {/* Brand Header */}
         <div className="text-center space-y-2">
@@ -291,14 +311,14 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 className="w-full h-full rounded-full object-contain"
               />
             </div>
-            <span className="absolute -bottom-1 -right-1 bg-purple-900 text-amber-300 p-1.5 rounded-full border-2 border-white shadow-md">
+            <span className="absolute -bottom-1 -right-1 bg-purple-900 text-amber-300 p-1.5 rounded-full border-2 border-white dark:border-slate-900 shadow-md">
               <Lock className="w-3.5 h-3.5" />
             </span>
           </div>
 
           <div>
-            <h1 className="text-2xl font-black text-slate-900">Painel do Luky</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white">Painel do Luky</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {step === 'PIN'
                 ? 'Digite seu PIN para desbloquear o painel'
                 : 'Autorização de Novo Dispositivo (2FA)'}
@@ -307,8 +327,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
           {/* Badge de Dispositivo Autorizado */}
           {step === 'PIN' && isDeviceKnown && (
-            <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold px-3 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold px-3 py-1 rounded-full">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Aparelho Autorizado (2FA dispensado)</span>
             </div>
           )}
@@ -316,16 +336,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
         {/* Notificação de Bloqueio por Tentativas Incorretas (Lockout) */}
         {lockoutSeconds > 0 && (
-          <div className="p-4 bg-red-50 border-2 border-red-300 text-red-900 rounded-2xl flex items-start gap-3 animate-in shake">
-            <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div className="p-4 bg-red-50 dark:bg-red-950/80 border-2 border-red-300 dark:border-red-800 text-red-900 dark:text-red-200 rounded-2xl flex items-start gap-3 animate-in shake">
+            <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <span className="block font-black text-xs text-red-950 uppercase tracking-wider">
+              <span className="block font-black text-xs text-red-950 dark:text-red-100 uppercase tracking-wider">
                 Acesso Temporariamente Bloqueado
               </span>
-              <p className="text-xs text-red-800">
+              <p className="text-xs text-red-800 dark:text-red-300">
                 Tentativas incorretas consecutivas detectadas. Aguarde o cronômetro para tentar novamente:
               </p>
-              <div className="pt-1 flex items-center gap-1.5 font-black text-sm text-red-700">
+              <div className="pt-1 flex items-center gap-1.5 font-black text-sm text-red-700 dark:text-red-400">
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
                 <span>Desbloqueio em: {lockoutSeconds} segundos</span>
               </div>
@@ -335,10 +355,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
         {/* Notificação de Erro Normal */}
         {errorMsg && lockoutSeconds === 0 && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl text-center animate-in shake">
+          <div className="p-3 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-bold rounded-xl text-center animate-in shake">
             {errorMsg}
             {attemptsLeft !== null && attemptsLeft > 0 && (
-              <span className="block text-[11px] font-medium text-red-600 mt-0.5">
+              <span className="block text-[11px] font-medium text-red-600 dark:text-red-400 mt-0.5">
                 Restam {attemptsLeft} tentativa(s) antes do bloqueio de segurança.
               </span>
             )}
@@ -352,11 +372,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           <form onSubmit={handlePinSubmit} className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-purple-700" />
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
                   <span>PIN de Acesso</span>
                 </label>
-                <span className="text-[10px] text-slate-400 font-medium">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
                   {pin.length > 0 ? `${pin.length} dígitos` : 'Mínimo 4 dígitos'}
                 </span>
               </div>
@@ -373,13 +393,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   placeholder="Ex: 1234"
                   value={pin}
                   onChange={handlePinChange}
-                  className="w-full text-center text-xl tracking-widest font-black py-3 px-10 rounded-2xl border-2 border-slate-200 focus:border-purple-700 focus:outline-hidden transition-colors disabled:bg-slate-100 disabled:text-slate-400"
+                  className="w-full text-center text-xl tracking-widest font-black py-3 px-10 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-purple-700 dark:focus:border-purple-500 focus:outline-hidden transition-colors disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors p-1 cursor-pointer"
                   title={showPin ? 'Ocultar PIN' : 'Mostrar PIN'}
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -409,15 +429,15 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           /* ETAPA 2: VERIFICAÇÃO 2FA PARA AUTORIZAR ESTE DISPOSITIVO  */
           /* ========================================================= */
           <form onSubmit={handle2faSubmit} className="space-y-4">
-            <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-3.5 space-y-2 text-center">
+            <div className="bg-purple-50/70 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-900/60 rounded-2xl p-3.5 space-y-2 text-center">
               <div className="w-10 h-10 rounded-full bg-purple-900 text-amber-300 flex items-center justify-center mx-auto shadow-md">
                 <Laptop className="w-5 h-5" />
               </div>
-              <h2 className="text-sm font-black text-purple-950">Novo Dispositivo Detectado</h2>
-              <p className="text-xs text-purple-800 leading-relaxed">
+              <h2 className="text-sm font-black text-purple-950 dark:text-white">Novo Dispositivo Detectado</h2>
+              <p className="text-xs text-purple-800 dark:text-purple-300 leading-relaxed">
                 Para sua segurança, autorize este aparelho com o código enviado para o WhatsApp <strong>{formatMaskedPhone(phone)}</strong>.
               </p>
-              <span className="inline-block text-[10px] text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full font-medium">
+              <span className="inline-block text-[10px] text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-900/50 px-2 py-0.5 rounded-full font-medium">
                 ✨ Só precisa autorizar uma vez neste aparelho!
               </span>
 
@@ -436,7 +456,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 text-center">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 text-center">
                 Digite o Código de 6 Dígitos ou a Chave Mestra
               </label>
 
@@ -451,7 +471,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 placeholder="000000"
                 value={twoFactorCode}
                 onChange={handle2faCodeChange}
-                className="w-full text-center text-2xl tracking-[0.35em] font-black py-3 px-4 rounded-2xl border-2 border-purple-200 focus:border-purple-700 focus:outline-hidden transition-colors disabled:bg-slate-100 disabled:text-slate-400 font-mono"
+                className="w-full text-center text-2xl tracking-[0.35em] font-black py-3 px-4 rounded-2xl border-2 border-purple-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-purple-700 dark:focus:border-purple-500 focus:outline-hidden transition-colors disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400 font-mono"
               />
             </div>
 
@@ -481,7 +501,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   setTwoFactorCode('');
                   setErrorMsg('');
                 }}
-                className="text-slate-500 hover:text-purple-800 font-bold transition-colors cursor-pointer"
+                className="text-slate-500 dark:text-slate-400 hover:text-purple-800 dark:hover:text-purple-300 font-bold transition-colors cursor-pointer"
               >
                 ← Voltar ao PIN
               </button>
@@ -490,7 +510,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 type="button"
                 onClick={handleResendCode}
                 disabled={resendCooldown > 0 || lockoutSeconds > 0 || isSubmitting}
-                className="text-purple-700 hover:text-purple-900 font-bold disabled:text-slate-400 transition-colors cursor-pointer flex items-center gap-1"
+                className="text-purple-700 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300 font-bold disabled:text-slate-400 dark:disabled:text-slate-600 transition-colors cursor-pointer flex items-center gap-1"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
                 <span>
@@ -502,10 +522,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         )}
 
         {/* Retornar ao Cardápio */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-2 text-xs">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col items-center gap-2 text-xs">
           <Link
             to="/"
-            className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1.5 transition-colors pt-1"
+            className="text-purple-700 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300 font-bold flex items-center gap-1.5 transition-colors pt-1"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Voltar para o Cardápio do Cliente</span>
