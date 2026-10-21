@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, KeyRound, Smartphone, RefreshCw, CheckCircle2, ShieldAlert, Laptop } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowLeft, KeyRound, Smartphone, RefreshCw, CheckCircle2, ShieldAlert, Laptop } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { adminLoginRPC, adminVerify2FARPC } from '../services/supabaseService';
@@ -427,25 +427,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   href={whatsappShareUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl transition-all shadow-xs cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-xs cursor-pointer"
                 >
                   <Smartphone className="w-3.5 h-3.5" />
                   <span>Enviar Código para meu WhatsApp</span>
                 </a>
-
-                {/* Dica para teste/desenvolvimento ou chave mestra */}
-                {demoCode && (
-                  <button
-                    type="button"
-                    onClick={() => setTwoFactorCode(demoCode)}
-                    className="text-[11px] text-purple-700 bg-white border border-purple-200 hover:bg-purple-100/60 font-semibold py-1.5 px-2.5 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    title="Clique para preencher automaticamente"
-                  >
-                    <span>Código 2FA gerado:</span>
-                    <strong className="tracking-widest font-mono text-purple-950 bg-amber-100 px-1.5 py-0.5 rounded text-xs">{demoCode}</strong>
-                    <span className="text-[10px] text-slate-400 font-normal">(Clique p/ preencher)</span>
-                  </button>
-                )}
               </div>
             </div>
 
@@ -515,13 +501,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           </form>
         )}
 
-        {/* Tip & Return link */}
+        {/* Retornar ao Cardápio */}
         <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-2 text-xs">
-          <span className="text-[11px] text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-medium flex items-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-            <span>Chave Mestra de Backup: <strong>998877</strong></span>
-          </span>
-
           <Link
             to="/"
             className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1.5 transition-colors pt-1"
