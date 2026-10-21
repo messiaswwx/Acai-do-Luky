@@ -398,3 +398,79 @@ export function subscribeToOrders(
     }
   };
 }
+
+// ==============================================================================
+// AUTENTICAÇÃO E ATUALIZAÇÃO SEGURA VIA RPC (POSTGRESQL SECURITY DEFINER)
+// ==============================================================================
+
+export async function adminLoginRPC(pin: string, deviceToken = '') {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase.rpc('rpc_admin_login', {
+      p_pin: pin.trim(),
+      p_device_token: deviceToken.trim()
+    });
+
+    if (error) {
+      console.warn('Erro ao executar rpc_admin_login:', error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('Exceção ao chamar rpc_admin_login:', err);
+    return null;
+  }
+}
+
+export async function adminVerify2FARPC(challengeToken: string, code: string, deviceName = 'Dispositivo Autorizado') {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase.rpc('rpc_admin_verify_2fa', {
+      p_challenge_token: challengeToken.trim(),
+      p_code: code.trim(),
+      p_device_name: deviceName
+    });
+
+    if (error) {
+      console.warn('Erro ao executar rpc_admin_verify_2fa:', error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('Exceção ao chamar rpc_admin_verify_2fa:', err);
+    return null;
+  }
+}
+
+export async function adminUpdateSettingsRPC(pin: string, settings: StoreSettings) {
+  if (!isSupabaseConfigured || !supabase) return false;
+
+  try {
+    const { data, error } = await supabase.rpc('rpc_admin_update_settings', {
+      p_pin: pin.trim(),
+      p_store_name: settings.storeName,
+      p_is_open: settings.isOpen,
+      p_whatsapp: settings.whatsapp,
+      p_pix_key: settings.pixKey,
+      p_pix_key_type: settings.pixKeyType,
+      p_delivery_fee: settings.deliveryFee,
+      p_estimated_time: settings.estimatedTime,
+      p_address: settings.address,
+      p_min_order_value: settings.minOrderValue,
+      p_new_pin: settings.adminPin && settings.adminPin !== 'PROTEGIDO' ? settings.adminPin : null,
+      p_new_backup_code: settings.twoFactorBackupCode && settings.twoFactorBackupCode !== 'PROTEGIDO' ? settings.twoFactorBackupCode : null,
+      p_2fa_enabled: settings.twoFactorEnabled
+    });
+
+    if (error || !data?.success) {
+      console.warn('Erro ao atualizar configurações via RPC segura:', error || data?.error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exceção ao chamar rpc_admin_update_settings:', err);
+    return false;
+  }
+}

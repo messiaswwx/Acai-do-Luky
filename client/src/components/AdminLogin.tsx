@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, KeyRound, Smartphone, RefreshCw, CheckCircle2, ShieldAlert, Laptop } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { isSupabaseConfigured } from '../utils/supabase';
+import { adminLoginRPC, adminVerify2FARPC } from '../services/supabaseService';
 
 interface AdminLoginProps {
   expectedPin?: string;
@@ -93,19 +95,36 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
     try {
       const storedDeviceToken = localStorage.getItem(DEVICE_TOKEN_KEY) || '';
+      let data: any = null;
 
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pin: pin.trim(),
-          deviceToken: storedDeviceToken
-        })
-      });
+      // 1. Tenta autenticar pelo Supabase RPC (segurança máxima direta no banco)
+      if (isSupabaseConfigured) {
+        data = await adminLoginRPC(pin.trim(), storedDeviceToken);
+      }
 
-      const data = await res.json();
+      // 2. Se o Supabase não responder, tenta a API local
+      if (!data) {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pin: pin.trim(),
+            deviceToken: storedDeviceToken
+          })
+        });
 
-      if (res.ok) {
+        if (res.status === 429) {
+          const errData = await res.json();
+          setLockoutSeconds(errData.lockoutSeconds || 60);
+          setErrorMsg(errData.error || 'Acesso bloqueado por tentativas incorretas.');
+          setAttemptsLeft(0);
+          return;
+        }
+
+        data = await res.json();
+      }
+
+      if (data && data.success) {
         if (data.require2FA) {
           // Dispositivo novo / não autorizado: avança para a Etapa 2 (2FA)
           setChallengeToken(data.challengeToken);
@@ -128,17 +147,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         return;
       }
 
-      if (res.status === 429) {
-        setLockoutSeconds(data.lockoutSeconds || 60);
-        setErrorMsg(data.error || 'Acesso temporariamente bloqueado por tentativas incorretas.');
-        setAttemptsLeft(0);
-      } else if (res.status === 401) {
-        setErrorMsg(data.error || 'PIN incorreto.');
-        setAttemptsLeft(data.attemptsLeft ?? null);
-        setPin('');
-      } else {
-        setErrorMsg(data.error || 'Erro ao validar PIN.');
-      }
+      // PIN incorreto
+      setErrorMsg(data?.error || 'PIN incorreto. Verifique a senha e tente novamente.');
+      setPin('');
     } catch {
       // Fallback offline de emergência
       if (pin.trim() === (expectedPin || '1234').trim()) {
@@ -168,19 +179,37 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/auth/verify-2fa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          challengeToken,
-          code: twoFactorCode.trim(),
-          deviceName: navigator.userAgent.includes('Mobile') ? 'Celular' : 'Computador/Notebook'
-        })
-      });
+      const deviceName = navigator.userAgent.includes('Mobile') ? 'Celular' : 'Computador/Notebook';
+      let data: any = null;
 
-      const data = await res.json();
+      // 1. Tenta validar no Supabase RPC
+      if (isSupabaseConfigured) {
+        data = await adminVerify2FARPC(challengeToken, twoFactorCode.trim(), deviceName);
+      }
 
-      if (res.ok && data.success) {
+      // 2. Se o Supabase não responder, chama API local
+      if (!data) {
+        const res = await fetch('/api/auth/verify-2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            challengeToken,
+            code: twoFactorCode.trim(),
+            deviceName
+          })
+        });
+
+        if (res.status === 429) {
+          setLockoutSeconds(60);
+          setErrorMsg('Acesso bloqueado por tentativas excedidas.');
+          setAttemptsLeft(0);
+          return;
+        }
+
+        data = await res.json();
+      }
+
+      if (data && data.success) {
         // Dispositivo agora está autorizado permanentemente!
         if (data.deviceToken) {
           localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
@@ -191,17 +220,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         return;
       }
 
-      if (res.status === 429) {
-        setLockoutSeconds(data.lockoutSeconds || 60);
-        setErrorMsg(data.error || 'Acesso bloqueado por tentativas excedidas.');
-        setAttemptsLeft(0);
-      } else if (res.status === 401) {
-        setErrorMsg(data.error || 'Código 2FA incorreto.');
-        setAttemptsLeft(data.attemptsLeft ?? null);
-        setTwoFactorCode('');
-      } else {
-        setErrorMsg(data.error || 'Erro ao validar código.');
-      }
+      setErrorMsg(data?.error || 'Código 2FA incorreto.');
+      setTwoFactorCode('');
     } catch {
       // Fallback offline (código backup 998877 ou código demo)
       if (twoFactorCode.trim() === '998877' || (demoCode && twoFactorCode.trim() === demoCode)) {
