@@ -43,35 +43,79 @@ export async function fetchStoreSettings(): Promise<StoreSettings | null> {
 export async function saveStoreSettings(settings: StoreSettings): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
+  const pinToUse = sessionStorage.getItem('luky_admin_pin') || settings.adminPin || '1234';
+
   try {
-    const { error } = await supabase
-      .from('store_settings')
-      .update({
-        store_name: settings.storeName,
-        is_open: settings.isOpen,
-        whatsapp: settings.whatsapp,
-        pix_key: settings.pixKey,
-        pix_key_type: settings.pixKeyType,
-        delivery_fee: settings.deliveryFee,
-        estimated_time: settings.estimatedTime,
-        address: settings.address,
-        min_order_value: settings.minOrderValue,
-        admin_pin: settings.adminPin,
-        two_factor_enabled: settings.twoFactorEnabled,
-        two_factor_backup_code: settings.twoFactorBackupCode,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', 1);
+    const { data, error } = await supabase.rpc('rpc_admin_update_settings', {
+      p_pin: pinToUse,
+      p_store_name: settings.storeName,
+      p_is_open: settings.isOpen,
+      p_whatsapp: settings.whatsapp,
+      p_pix_key: settings.pixKey,
+      p_pix_key_type: settings.pixKeyType,
+      p_delivery_fee: settings.deliveryFee,
+      p_estimated_time: settings.estimatedTime,
+      p_address: settings.address,
+      p_min_order_value: settings.minOrderValue,
+      p_new_pin: settings.adminPin && settings.adminPin !== 'PROTEGIDO' ? settings.adminPin : null,
+      p_new_backup_code: settings.twoFactorBackupCode && settings.twoFactorBackupCode !== 'PROTEGIDO' ? settings.twoFactorBackupCode : null,
+      p_2fa_enabled: settings.twoFactorEnabled !== false
+    });
 
     if (error) {
-      console.error('Erro ao atualizar store_settings:', error);
+      console.warn('RPC de atualização retornou erro:', error);
+      // Fallback direto
+      const { error: directError } = await supabase
+        .from('store_settings')
+        .update({
+          store_name: settings.storeName,
+          is_open: settings.isOpen,
+          whatsapp: settings.whatsapp,
+          pix_key: settings.pixKey,
+          pix_key_type: settings.pixKeyType,
+          delivery_fee: settings.deliveryFee,
+          estimated_time: settings.estimatedTime,
+          address: settings.address,
+          min_order_value: settings.minOrderValue,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1);
+
+      return !directError;
+    }
+
+    if (data && typeof data === 'object' && 'success' in data && !data.success) {
+      console.warn('RPC negada:', data);
       return false;
     }
+
     return true;
   } catch (err) {
     console.error('Exceção ao salvar configurações:', err);
     return false;
   }
+}
+
+export function subscribeToStoreSettings(onUpdate: (settings: StoreSettings) => void) {
+  const client = supabase;
+  if (!isSupabaseConfigured || !client) return () => {};
+
+  const channel = client
+    .channel('realtime_store_settings')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'store_settings' },
+      () => {
+        fetchStoreSettings().then(st => {
+          if (st) onUpdate(st);
+        });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
 }
 
 // ==============================================================================
@@ -121,6 +165,28 @@ export async function saveMenuData(menu: MenuData): Promise<boolean> {
     console.error('Exceção ao salvar menu:', err);
     return false;
   }
+}
+
+export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
+  const client = supabase;
+  if (!isSupabaseConfigured || !client) return () => {};
+
+  const channel = client
+    .channel('realtime_menu_data')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'menu_data' },
+      () => {
+        fetchMenuData().then(m => {
+          if (m) onUpdate(m);
+        });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
 }
 
 // ==============================================================================

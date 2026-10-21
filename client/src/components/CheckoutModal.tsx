@@ -59,6 +59,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
+    if (!settings.isOpen) {
+      setErrorMsg('A loja está temporariamente fechada e não pode receber novos pedidos agora. Por favor, volte quando a loja reabrir!');
+      return;
+    }
+
     if (!customerName.trim()) {
       setErrorMsg('Por favor, informe seu nome completo.');
       return;
@@ -494,11 +499,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-4 px-6 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 text-base cursor-pointer disabled:opacity-50"
+            disabled={isSubmitting || !settings.isOpen}
+            className={`w-full font-black py-4 px-6 rounded-2xl shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 text-base cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              !settings.isOpen
+                ? 'bg-slate-500 text-white shadow-none'
+                : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 shadow-amber-500/20'
+            }`}
           >
             <Send className="w-5 h-5 stroke-[2.5]" />
-            <span>{isSubmitting ? 'Enviando Pedido...' : `Confirmar Pedido (${formatCurrency(total)})`}</span>
+            <span>
+              {!settings.isOpen
+                ? 'Loja Fechada no Momento'
+                : isSubmitting
+                ? 'Enviando Pedido...'
+                : `Confirmar Pedido (${formatCurrency(total)})`}
+            </span>
           </button>
         </form>
       </div>

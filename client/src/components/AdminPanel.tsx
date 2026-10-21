@@ -353,6 +353,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSavingSettings(false);
   };
 
+  const handleQuickToggleStoreOpen = async () => {
+    const nextStatus = !localSettings.isOpen;
+    const updated = { ...localSettings, isOpen: nextStatus };
+    setLocalSettings(updated);
+    await onUpdateSettings(updated);
+  };
+
   // Memoized Metrics to avoid unnecessary recomputations when typing in price inputs
   const totalRevenue = useMemo(() => {
     return orders
@@ -381,12 +388,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-black text-slate-900 dark:text-white">Painel do Luky</h1>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-                settings.isOpen ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
-              }`}>
-                <Power className="w-3 h-3" />
-                {settings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
-              </span>
+              <button
+                type="button"
+                onClick={handleQuickToggleStoreOpen}
+                title="Clique para alternar entre Loja Aberta e Loja Fechada"
+                className={`text-xs px-2.5 py-1 rounded-full font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                  localSettings.isOpen 
+                    ? 'bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' 
+                    : 'bg-red-100 hover:bg-red-200 dark:bg-red-950/80 dark:hover:bg-red-900 text-red-800 dark:text-red-300 border border-red-300 dark:border-red-800 animate-pulse'
+                }`}
+              >
+                <Power className="w-3 h-3 stroke-[2.5]" />
+                <span>{localSettings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}</span>
+              </button>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cozinha, Gestão de Preços, Promoções e Cardápio</p>
           </div>
@@ -1422,9 +1436,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setLocalSettings({ ...localSettings, isOpen: !localSettings.isOpen })}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                  localSettings.isOpen ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+                onClick={handleQuickToggleStoreOpen}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 ${
+                  localSettings.isOpen ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'
                 }`}
               >
                 {localSettings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}

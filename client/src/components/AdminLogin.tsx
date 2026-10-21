@@ -148,6 +148,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
         }
         sessionStorage.setItem('luky_admin_unlocked', 'true');
+        sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
         return;
       }
@@ -159,6 +160,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
       // Fallback offline de emergência
       if (pin.trim() === (expectedPin || '1234').trim()) {
         sessionStorage.setItem('luky_admin_unlocked', 'true');
+        sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
       } else {
         setErrorMsg('PIN incorreto. Tente novamente.');
@@ -221,6 +223,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           setIsDeviceKnown(true);
         }
         sessionStorage.setItem('luky_admin_unlocked', 'true');
+        if (pin) sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
         return;
       }
@@ -232,6 +235,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
       if (twoFactorCode.trim() === '998877' || (demoCode && twoFactorCode.trim() === demoCode)) {
         localStorage.setItem(DEVICE_TOKEN_KEY, `local_${Date.now()}`);
         sessionStorage.setItem('luky_admin_unlocked', 'true');
+        if (pin) sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
       } else {
         setErrorMsg('Código incorreto.');

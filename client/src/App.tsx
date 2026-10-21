@@ -13,7 +13,14 @@ import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLogin } from './components/AdminLogin';
 import { isSupabaseConfigured } from './utils/supabase';
-import { fetchStoreSettings, fetchMenuData, saveStoreSettings, saveMenuData } from './services/supabaseService';
+import { 
+  fetchStoreSettings, 
+  fetchMenuData, 
+  saveStoreSettings, 
+  saveMenuData,
+  subscribeToStoreSettings,
+  subscribeToMenuData
+} from './services/supabaseService';
 import { 
   Clock, 
   MapPin, 
@@ -146,6 +153,20 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
+
+    // Supabase Realtime subscriptions
+    if (isSupabaseConfigured) {
+      const unsubSettings = subscribeToStoreSettings(newSettings => {
+        setSettings(newSettings);
+      });
+      const unsubMenu = subscribeToMenuData(newMenu => {
+        setMenu(newMenu);
+      });
+      return () => {
+        unsubSettings();
+        unsubMenu();
+      };
+    }
 
     const socket = getSocket();
     const handleSettingsUpdated = (newSettings: StoreSettings) => setSettings(newSettings);
@@ -315,6 +336,30 @@ export default function App() {
 
               {/* Conteúdo Principal do Cliente */}
               <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 space-y-6">
+                {/* Alerta de Loja Fechada */}
+                {!settings.isOpen && (
+                  <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-3xl shadow-xl border border-red-500/50 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-3.5 text-center sm:text-left">
+                      <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                        <Store className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-base tracking-wide flex items-center justify-center sm:justify-start gap-2">
+                          <span>Loja Fechada no Momento</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping"></span>
+                        </h3>
+                        <p className="text-xs text-red-100 mt-1 max-w-xl leading-relaxed">
+                          Nosso atendimento está em pausa no momento. Você pode navegar pelo cardápio e montar seu copo, mas novos pedidos só serão aceitos quando a loja reabrir!
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 bg-black/25 backdrop-blur-xs px-4 py-2 rounded-2xl border border-white/20 text-xs font-black text-amber-300 flex items-center gap-1.5 shadow-xs">
+                      <Clock className="w-4 h-4 text-amber-300" />
+                      <span>Volte em breve!</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Hero Card */}
                 <div className="relative overflow-hidden bg-gradient-to-br from-[#471256] via-[#5c1c73] to-[#360942] text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-purple-800/40">
                   <div className="absolute -right-8 -bottom-8 w-48 h-48 rounded-full bg-amber-400/10 pointer-events-none" />
