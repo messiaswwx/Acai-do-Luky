@@ -102,3 +102,15 @@ export interface Order {
   total: number;
   notes?: string;
 }
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: 'AÇAÍ' | 'FRUTAS' | 'COMPLEMENTOS' | 'EMBALAGENS' | 'CALDAS' | string;
+  quantity: number;
+  unit: string;
+  min_alert_quantity: number;
+  cost_price?: number;
+  supplier?: string;
+  updated_at?: string;
+}

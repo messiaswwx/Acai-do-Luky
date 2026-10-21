@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import type { CartItem, StoreSettings, PaymentMethod, Order } from '../types';
 import { formatCurrency } from '../utils/format';
 import { X, Bike, Store, QrCode, CreditCard, Banknote, Copy, Check, ArrowLeft, Send } from 'lucide-react';
+import { isSupabaseConfigured } from '../utils/supabase';
+import { createOrder } from '../services/supabaseService';
 
 interface CheckoutModalProps {
   items: CartItem[];
@@ -107,18 +109,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         total
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload)
-      });
+      let createdOrder: Order | null = null;
 
-      if (!res.ok) {
-        throw new Error('Falha ao registrar pedido.');
+      // 1. Tenta salvar no Supabase (Nuvem em Tempo Real)
+      if (isSupabaseConfigured) {
+        createdOrder = await createOrder(orderPayload);
       }
 
-      const createdOrder: Order = await res.json();
-      onOrderSuccess(createdOrder);
+      // 2. Se o Supabase não estiver configurado ou falhar, salva no backend local
+      if (!createdOrder) {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
+
+        if (!res.ok) {
+          throw new Error('Falha ao registrar pedido.');
+        }
+
+        createdOrder = await res.json();
+      }
+
+      if (createdOrder) {
+        onOrderSuccess(createdOrder);
+      }
     } catch (err: unknown) {
       setErrorMsg((err as Error).message || 'Erro ao conectar ao servidor. Tente novamente.');
     } finally {

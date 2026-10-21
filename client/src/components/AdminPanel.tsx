@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Order, OrderStatus, StoreSettings, MenuData } from '../types';
+import type { Order, OrderStatus, StoreSettings, MenuData, InventoryItem } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
 import { playOrderAlert } from '../utils/audio';
 import { getRemainingHoursText } from '../utils/promo';
 import { getSocket } from '../utils/socket';
+import { isSupabaseConfigured } from '../utils/supabase';
+import { 
+  fetchOrders as fetchSupabaseOrders,
+  updateOrderStatus as updateSupabaseOrderStatus,
+  subscribeToOrders,
+  fetchInventory,
+  updateInventoryQuantity,
+  saveInventoryItem
+} from '../services/supabaseService';
 import { PrintReceipt } from './PrintReceipt';
 import { 
   Bell, 
@@ -27,7 +36,12 @@ import {
   Clock, 
   XCircle,
   LogOut,
-  ExternalLink
+  ExternalLink,
+  Boxes,
+  Plus,
+  Minus,
+  AlertTriangle,
+  PackageCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -47,7 +61,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onLogout
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'CONFIGURACOES'>('PEDIDOS');
+  const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'ESTOQUE' | 'CONFIGURACOES'>('PEDIDOS');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<Order | null>(null);
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'TODOS'>('TODOS');
@@ -59,6 +73,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [savingMenu, setSavingMenu] = useState(false);
   const [menuSavedFeedback, setMenuSavedFeedback] = useState(false);
 
+  // Controle de Estoque
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryCategory, setInventoryCategory] = useState<string>('TODOS');
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [newItemModal, setNewItemModal] = useState(false);
+  const [newItemForm, setNewItemForm] = useState({
+    name: '',
+    category: 'COMPLEMENTOS',
+    quantity: 10,
+    unit: 'un',
+    min_alert_quantity: 3,
+    cost_price: 0,
+    supplier: ''
+  });
+
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
@@ -69,6 +98,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const loadOrders = async () => {
     try {
+      if (isSupabaseConfigured) {
+        const supOrders = await fetchSupabaseOrders();
+        if (supOrders && supOrders.length > 0) {
+          setOrders(supOrders);
+          return;
+        }
+      }
       const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
@@ -79,48 +115,127 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const loadInventory = async () => {
+    setInventoryLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const items = await fetchInventory();
+        setInventory(items);
+      }
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
   const soundEnabledRef = useRef(soundEnabled);
   soundEnabledRef.current = soundEnabled;
 
   useEffect(() => {
     loadOrders();
-    const socket = getSocket();
+    loadInventory();
 
     const handleNewOrder = (newOrder: Order) => {
-      setOrders(prev => [newOrder, ...prev]);
-      if (soundEnabledRef.current) {
-        playOrderAlert();
-      }
+      setOrders(prev => {
+        if (prev.some(o => o.id === newOrder.id)) return prev;
+        if (soundEnabledRef.current) {
+          playOrderAlert();
+        }
+        return [newOrder, ...prev];
+      });
     };
 
     const handleOrderStatus = (updated: Order) => {
       setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
     };
 
+    // Socket.IO local
+    const socket = getSocket();
     socket.on('new_order', handleNewOrder);
     socket.on('order_status_updated', handleOrderStatus);
+
+    // Supabase Realtime (se configurado)
+    let unsubscribeSupabase = () => {};
+    if (isSupabaseConfigured) {
+      unsubscribeSupabase = subscribeToOrders(
+        (newOrder) => handleNewOrder(newOrder),
+        (updatedOrder) => handleOrderStatus(updatedOrder)
+      );
+    }
 
     return () => {
       socket.off('new_order', handleNewOrder);
       socket.off('order_status_updated', handleOrderStatus);
+      unsubscribeSupabase();
     };
   }, []);
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+
+    if (isSupabaseConfigured) {
+      await updateSupabaseOrderStatus(orderId, newStatus);
+    }
+
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      await fetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-      }
-    } catch (err) {
-      console.error('Erro ao atualizar status do pedido:', err);
+    } catch {
+      // offline fallback
     }
   };
+
+  // Funções de Estoque
+  const handleAdjustQuantity = async (item: InventoryItem, delta: number) => {
+    const newQty = Math.max(0, Number((item.quantity + delta).toFixed(2)));
+    setInventory(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty } : i));
+    if (isSupabaseConfigured) {
+      await updateInventoryQuantity(item.id, newQty);
+    }
+  };
+
+  const handleCreateInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemForm.name.trim()) return;
+
+    const newItem: InventoryItem = {
+      id: `est-${Date.now().toString().slice(-6)}`,
+      name: newItemForm.name.trim(),
+      category: newItemForm.category,
+      quantity: Number(newItemForm.quantity) || 0,
+      unit: newItemForm.unit.trim() || 'un',
+      min_alert_quantity: Number(newItemForm.min_alert_quantity) || 1,
+      cost_price: Number(newItemForm.cost_price) || 0,
+      supplier: newItemForm.supplier.trim() || undefined
+    };
+
+    setInventory(prev => [...prev, newItem]);
+    if (isSupabaseConfigured) {
+      await saveInventoryItem(newItem);
+    }
+
+    setNewItemModal(false);
+    setNewItemForm({
+      name: '',
+      category: 'COMPLEMENTOS',
+      quantity: 10,
+      unit: 'un',
+      min_alert_quantity: 3,
+      cost_price: 0,
+      supplier: ''
+    });
+  };
+
+  const lowStockItems = useMemo(() => {
+    return inventory.filter(i => i.quantity <= i.min_alert_quantity);
+  }, [inventory]);
+
+  const filteredInventory = useMemo(() => {
+    if (inventoryCategory === 'TODOS') return inventory;
+    return inventory.filter(i => i.category === inventoryCategory);
+  }, [inventory, inventoryCategory]);
 
   // Price & Discount editing handlers
   const handleSizeOriginalPriceChange = (sizeId: string, val: number) => {
@@ -391,6 +506,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <SlidersHorizontal className="w-4 h-4" />
           <span>Preços, Descontos & Cardápio</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ESTOQUE')}
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+            activeTab === 'ESTOQUE'
+              ? 'border-purple-800 text-purple-950'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Boxes className="w-4 h-4" />
+          <span>Controle de Estoque ({inventory.length})</span>
+          {lowStockItems.length > 0 && (
+            <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+              {lowStockItems.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -958,7 +1090,308 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 3: CONFIGURAÇÕES DA LOJA */}
+      {/* TAB 3: CONTROLE DE ESTOQUE */}
+      {activeTab === 'ESTOQUE' && (
+        <div className="space-y-5">
+          {/* Header & Quick Actions */}
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-purple-700" />
+                <h2 className="text-lg font-black text-slate-900">Estoque de Ingredientes & Embalagens</h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Acompanhe o consumo diário de açaí, potes de Nutella, copos descartáveis e frutas.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={loadInventory}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${inventoryLoading ? 'animate-spin' : ''}`} />
+                <span>Atualizar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNewItemModal(true)}
+                className="px-4 py-2 bg-purple-800 hover:bg-purple-900 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-purple-950/20 active:scale-98 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Item</span>
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Cards de Estoque */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+                <Boxes className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase">Itens Cadastrados</span>
+                <div className="text-lg font-black text-slate-900">{inventory.length} produtos</div>
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-2xl border flex items-center gap-3 ${
+              lowStockItems.length > 0 
+                ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-300/30' 
+                : 'bg-white border-slate-200'
+            }`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                lowStockItems.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {lowStockItems.length > 0 ? <AlertTriangle className="w-5 h-5" /> : <PackageCheck className="w-5 h-5" />}
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase">Estoque Baixo / Alerta</span>
+                <div className={`text-lg font-black ${lowStockItems.length > 0 ? 'text-amber-950' : 'text-emerald-800'}`}>
+                  {lowStockItems.length > 0 ? `${lowStockItems.length} itens acabando!` : 'Tudo abastecido'}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase">Status do Banco</span>
+                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Sincronizado na Nuvem</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtro de Categorias */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {['TODOS', 'AÇAÍ', 'EMBALAGENS', 'COMPLEMENTOS', 'FRUTAS', 'CALDAS'].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setInventoryCategory(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                  inventoryCategory === cat
+                    ? 'bg-purple-900 text-amber-300 shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-purple-50 hover:text-purple-900'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid de Itens do Estoque */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredInventory.map(item => {
+              const isLow = item.quantity <= item.min_alert_quantity;
+              const step = item.unit === 'un' && item.category === 'EMBALAGENS' ? 10 : 1;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-white rounded-3xl p-5 border-2 transition-all space-y-4 shadow-xs ${
+                    isLow 
+                      ? 'border-amber-400 bg-amber-50/20 ring-2 ring-amber-400/20' 
+                      : 'border-slate-200 hover:border-purple-300'
+                  }`}
+                >
+                  {/* Top: Nome e Categoria */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-black text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {item.category}
+                      </span>
+                      <h3 className="font-black text-sm text-slate-900 mt-1">{item.name}</h3>
+                      {item.supplier && (
+                        <p className="text-[11px] text-slate-400">Fornecedor: {item.supplier}</p>
+                      )}
+                    </div>
+
+                    {isLow && (
+                      <span className="bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse shrink-0">
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        Baixo
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Contador de Quantidade e Botões Rápidos */}
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Saldo Atual</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-purple-950 font-mono">
+                          {item.quantity}
+                        </span>
+                        <span className="text-xs font-bold text-slate-600">{item.unit}</span>
+                      </div>
+                    </div>
+
+                    {/* Botões - e + */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustQuantity(item, -step)}
+                        className="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-red-50 hover:text-red-700 hover:border-red-300 flex items-center justify-center font-black text-slate-700 transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title={`Diminuir ${step} ${item.unit}`}
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustQuantity(item, step)}
+                        className="w-9 h-9 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 flex items-center justify-center font-black transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title={`Adicionar ${step} ${item.unit}`}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Alerta de Estoque Mínimo */}
+                  {isLow ? (
+                    <div className="text-[11px] font-bold text-amber-900 bg-amber-100/70 p-2 rounded-xl border border-amber-200 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Comprar mais! Mínimo sugerido: {item.min_alert_quantity} {item.unit}</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
+                      <span>Alerta mínimo: {item.min_alert_quantity} {item.unit}</span>
+                      {item.cost_price ? <span>Custo: {formatCurrency(item.cost_price)}</span> : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Modal de Cadastro de Novo Item */}
+          {newItemModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-purple-200 space-y-4 animate-in zoom-in-95">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                    <Boxes className="w-5 h-5 text-purple-700" />
+                    <span>Cadastrar Item no Estoque</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setNewItemModal(false)}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                  >
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateInventoryItem} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Item *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Leite Ninho Lata 400g"
+                      value={newItemForm.name}
+                      onChange={e => setNewItemForm({ ...newItemForm, name: e.target.value })}
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Categoria</label>
+                      <select
+                        value={newItemForm.category}
+                        onChange={e => setNewItemForm({ ...newItemForm, category: e.target.value })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                      >
+                        <option value="AÇAÍ">Açaí</option>
+                        <option value="EMBALAGENS">Embalagens</option>
+                        <option value="COMPLEMENTOS">Complementos</option>
+                        <option value="FRUTAS">Frutas</option>
+                        <option value="CALDAS">Caldas</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Unidade</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: un, kg, latas, baldes"
+                        value={newItemForm.unit}
+                        onChange={e => setNewItemForm({ ...newItemForm, unit: e.target.value })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Quantidade Atual</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={newItemForm.quantity}
+                        onChange={e => setNewItemForm({ ...newItemForm, quantity: parseFloat(e.target.value) || 0 })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Alerta Mínimo</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={newItemForm.min_alert_quantity}
+                        onChange={e => setNewItemForm({ ...newItemForm, min_alert_quantity: parseFloat(e.target.value) || 1 })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Fornecedor (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Atacadão, Ceasa, Distribuidora"
+                      value={newItemForm.supplier}
+                      onChange={e => setNewItemForm({ ...newItemForm, supplier: e.target.value })}
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewItemModal(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 text-xs font-black text-white bg-purple-900 hover:bg-purple-950 rounded-xl shadow-md cursor-pointer"
+                    >
+                      Salvar Item
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: CONFIGURAÇÕES DA LOJA */}
       {activeTab === 'CONFIGURACOES' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200">
           <form onSubmit={handleSaveSettings} className="max-w-xl space-y-5">

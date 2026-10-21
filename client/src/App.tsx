@@ -10,6 +10,8 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLogin } from './components/AdminLogin';
+import { isSupabaseConfigured } from './utils/supabase';
+import { fetchStoreSettings, fetchMenuData, saveStoreSettings, saveMenuData } from './services/supabaseService';
 import { 
   Clock, 
   MapPin, 
@@ -93,9 +95,19 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeTrackingOrder, setActiveTrackingOrder] = useState<Order | null>(null);
 
-  // Fetch settings & menu from backend
+  // Fetch settings & menu from Supabase (ou fallback para backend local)
   const fetchData = async () => {
     try {
+      if (isSupabaseConfigured) {
+        const [supSettings, supMenu] = await Promise.all([
+          fetchStoreSettings(),
+          fetchMenuData()
+        ]);
+        if (supSettings) setSettings(supSettings);
+        if (supMenu) setMenu(supMenu);
+        return;
+      }
+
       const [resSettings, resMenu] = await Promise.all([
         fetch('/api/settings'),
         fetch('/api/menu')
@@ -147,32 +159,34 @@ export default function App() {
   }, []);
 
   const handleUpdateSettings = async (newSettings: StoreSettings) => {
+    setSettings(newSettings);
+    if (isSupabaseConfigured) {
+      await saveStoreSettings(newSettings);
+    }
     try {
-      const res = await fetch('/api/settings', {
+      await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
-      if (res.ok) {
-        setSettings(newSettings);
-      }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Servidor local offline, Supabase já persistiu
     }
   };
 
   const handleUpdateMenu = async (newMenu: MenuData) => {
+    setMenu(newMenu);
+    if (isSupabaseConfigured) {
+      await saveMenuData(newMenu);
+    }
     try {
-      const res = await fetch('/api/menu', {
+      await fetch('/api/menu', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMenu)
       });
-      if (res.ok) {
-        setMenu(newMenu);
-      }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Servidor local offline, Supabase já persistiu
     }
   };
 
