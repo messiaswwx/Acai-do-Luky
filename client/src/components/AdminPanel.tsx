@@ -43,7 +43,8 @@ import {
   Minus,
   AlertTriangle,
   PackageCheck,
-  Sparkles
+  Sparkles,
+  Pencil
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from './ThemeToggle';
@@ -87,6 +88,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Controle de Estoque (Foco Exclusivo em Embalagens)
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemQty, setEditingItemQty] = useState<string>('');
   const [newItemModal, setNewItemModal] = useState(false);
   const [newItemForm, setNewItemForm] = useState({
     name: '',
@@ -244,6 +247,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleSetQuantity = async (item: InventoryItem, qty: number) => {
+    const validQty = Math.max(0, isNaN(qty) ? 0 : Math.round(Number(qty)));
+    setInventory(prev => prev.map(i => i.id === item.id ? { ...i, quantity: validQty } : i));
+    if (isSupabaseConfigured) {
+      await updateInventoryQuantity(item.id, validQty);
+    }
+  };
+
   const handleCreateInventoryItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemForm.name.trim()) return;
@@ -285,7 +296,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [inventory]);
 
   const filteredInventory = useMemo(() => {
-    return inventory;
+    const getOrderRank = (item: InventoryItem) => {
+      const id = (item.id || '').toLowerCase();
+      const name = (item.name || '').toLowerCase();
+      if (id.includes('300') || name.includes('300ml') || name.includes('300 ml')) return 1;
+      if (id.includes('500') || name.includes('500ml') || name.includes('500 ml')) return 2;
+      if (id.includes('700') || name.includes('700ml') || name.includes('700 ml')) return 3;
+      if (id.includes('1000') || name.includes('1 litro') || name.includes('1l') || name.includes('barca')) return 4;
+      return 100;
+    };
+
+    return [...inventory].sort((a, b) => {
+      const rankA = getOrderRank(a);
+      const rankB = getOrderRank(b);
+      if (rankA !== rankB) return rankA - rankB;
+      return a.name.localeCompare(b.name, 'pt-BR');
+    });
   }, [inventory]);
 
   // Price & Discount editing handlers
@@ -1318,14 +1344,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* Grid de Itens do Estoque de Embalagens */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {filteredInventory.map(item => {
               const isLow = item.quantity <= item.min_alert_quantity;
 
               return (
                 <div
                   key={item.id}
-                  className={`bg-white dark:bg-slate-900 rounded-3xl p-5 border-2 transition-all space-y-4 shadow-xs ${
+                  className={`bg-white dark:bg-slate-900 rounded-3xl p-5 border-2 transition-all flex flex-col justify-between gap-4 shadow-xs ${
                     isLow 
                       ? 'border-amber-400 dark:border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 ring-2 ring-amber-400/20' 
                       : 'border-slate-200 dark:border-slate-800 hover:border-purple-300'
@@ -1333,18 +1359,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 >
                   {/* Top: Nome e Categoria */}
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[10px] font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
                         Embalagem
                       </span>
-                      <h3 className="font-black text-sm text-slate-900 dark:text-white mt-1.5">{item.name}</h3>
+                      <h3 className="font-black text-sm text-slate-900 dark:text-white mt-1.5 leading-snug" title={item.name}>
+                        {item.name}
+                      </h3>
                       {item.supplier && (
-                        <p className="text-[11px] text-slate-400 mt-0.5">Fornecedor: {item.supplier}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate" title={`Fornecedor: ${item.supplier}`}>
+                          Fornecedor: {item.supplier}
+                        </p>
                       )}
                     </div>
 
                     {isLow && (
-                      <span className="bg-amber-100 dark:bg-amber-950/60 border border-amber-300 text-amber-900 dark:text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse shrink-0">
+                      <span className="bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse shrink-0">
                         <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                         Baixo
                       </span>
@@ -1352,23 +1382,80 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   {/* Contador de Quantidade e Botões Rápidos */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Saldo Atual</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-purple-950 dark:text-amber-300 font-mono">
-                          {item.quantity}
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex flex-col gap-3">
+                    {/* Linha do Saldo com toque para editar */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400 block">
+                          Saldo Atual
                         </span>
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{item.unit}</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Toque para editar</span>
                       </div>
+
+                      {editingItemId === item.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const num = Number(editingItemQty);
+                            if (!isNaN(num)) {
+                              handleSetQuantity(item, num);
+                            }
+                            setEditingItemId(null);
+                          }}
+                          className="flex items-center gap-1.5"
+                        >
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            autoFocus
+                            value={editingItemQty}
+                            onChange={(e) => setEditingItemQty(e.target.value)}
+                            onBlur={() => {
+                              const num = Number(editingItemQty);
+                              if (!isNaN(num)) {
+                                handleSetQuantity(item, num);
+                              }
+                              setEditingItemId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditingItemId(null);
+                            }}
+                            className="w-18 px-2 py-1 text-center font-mono font-black text-base bg-white dark:bg-slate-900 border-2 border-purple-600 rounded-xl text-purple-950 dark:text-amber-300 focus:outline-none shadow-xs"
+                          />
+                          <button
+                            type="submit"
+                            className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center cursor-pointer shadow-xs"
+                            title="Confirmar"
+                          >
+                            <Check className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItemId(item.id);
+                            setEditingItemQty(String(item.quantity));
+                          }}
+                          className="group/qty flex items-baseline gap-1.5 bg-white dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-purple-400 transition-all cursor-pointer shadow-2xs"
+                          title="Clique para digitar o número exato"
+                        >
+                          <span className="text-2xl font-black text-purple-950 dark:text-amber-300 font-mono tracking-tight group-hover/qty:text-purple-700 dark:group-hover/qty:text-amber-400 transition-colors">
+                            {item.quantity}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{item.unit}</span>
+                          <Pencil className="w-3 h-3 text-slate-400 group-hover/qty:text-purple-600 dark:group-hover/qty:text-amber-400 transition-colors ml-0.5" />
+                        </button>
+                      )}
                     </div>
 
-                    {/* Botões -10, -1, +1, +10 */}
-                    <div className="flex items-center gap-1">
+                    {/* Botões -10, -1, +1, +10 com Grid de 4 Colunas (100% contidos na caixa!) */}
+                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-700/50">
                       <button
                         type="button"
                         onClick={() => handleAdjustQuantity(item, -10)}
-                        className="px-2 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 text-xs font-black text-slate-600 dark:text-slate-300 transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        className="h-8.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 hover:border-red-300 dark:hover:border-red-800 text-xs font-black text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
                         title="Diminuir 10 unidades"
                       >
                         -10
@@ -1377,7 +1464,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => handleAdjustQuantity(item, -1)}
-                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 text-xs font-black text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        className="h-8.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 hover:border-red-300 dark:hover:border-red-800 text-xs font-black text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
                         title="Diminuir 1 unidade"
                       >
                         <Minus className="w-3.5 h-3.5" />
@@ -1386,7 +1473,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => handleAdjustQuantity(item, 1)}
-                        className="w-8 h-8 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 text-xs font-black flex items-center justify-center transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        className="h-8.5 rounded-xl bg-purple-900 hover:bg-purple-950 dark:bg-purple-800 dark:hover:bg-purple-700 text-amber-300 text-xs font-black flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
                         title="Adicionar 1 unidade"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1395,7 +1482,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => handleAdjustQuantity(item, 10)}
-                        className="px-2 h-8 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 text-xs font-black transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        className="h-8.5 rounded-xl bg-purple-900 hover:bg-purple-950 dark:bg-purple-800 dark:hover:bg-purple-700 text-amber-300 text-xs font-black flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
                         title="Adicionar 10 unidades (1 pacote)"
                       >
                         +10
@@ -1405,14 +1492,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   {/* Alerta de Estoque Mínimo */}
                   {isLow ? (
-                    <div className="text-[11px] font-bold text-amber-900 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 p-2 rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                    <div className="text-[11px] font-bold text-amber-900 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>Comprar mais! Mínimo sugerido: {item.min_alert_quantity} {item.unit}</span>
                     </div>
                   ) : (
-                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
-                      <span>Alerta mínimo: {item.min_alert_quantity} {item.unit}</span>
-                      {item.cost_price ? <span>Custo: {formatCurrency(item.cost_price)}</span> : null}
+                    <div className="text-[11px] text-slate-400 dark:text-slate-400 flex items-center justify-between px-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <span>Alerta mínimo: <strong className="text-slate-600 dark:text-slate-300">{item.min_alert_quantity} {item.unit}</strong></span>
+                      {item.cost_price ? <span>Custo: <strong className="text-slate-600 dark:text-slate-300">{formatCurrency(item.cost_price)}</strong></span> : null}
                     </div>
                   )}
                 </div>
