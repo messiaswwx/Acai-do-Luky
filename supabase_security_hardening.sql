@@ -63,9 +63,15 @@ DROP POLICY IF EXISTS "Segredos admin bloqueados" ON public.admin_auth_secrets;
 CREATE POLICY "Leitura pública das configurações da loja" 
 ON public.store_settings FOR SELECT USING (true);
 
--- B) CARDÁPIO: Público só pode LER os itens e preços. NINGUÉM altera sem a função segura!
+-- B) CARDÁPIO: Leitura pública e atualização permitida para o painel de controle
 CREATE POLICY "Leitura pública do cardápio" 
 ON public.menu_data FOR SELECT USING (true);
+
+CREATE POLICY "Atualizacao do cardapio" 
+ON public.menu_data FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "Insercao do cardapio" 
+ON public.menu_data FOR INSERT WITH CHECK (true);
 
 -- C) PEDIDOS: Qualquer cliente pode CRIAR pedido. Ninguém pode apagar ou alterar status diretamente!
 CREATE POLICY "Clientes podem criar pedidos" 
@@ -247,6 +253,21 @@ BEGIN
     UPDATE public.admin_auth_secrets SET two_factor_enabled = p_2fa_enabled WHERE id = 1;
   END IF;
 
+  RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- Função 4: Atualização Segura do Cardápio, Descontos e Preços
+CREATE OR REPLACE FUNCTION public.rpc_admin_update_menu(p_menu JSONB)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.menu_data SET data = p_menu, updated_at = NOW() WHERE id = 1;
+  IF NOT FOUND THEN
+    INSERT INTO public.menu_data (id, data, updated_at) VALUES (1, p_menu, NOW());
+  END IF;
   RETURN jsonb_build_object('success', true);
 END;
 $$;

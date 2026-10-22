@@ -73,7 +73,9 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
     }, 0);
   }, [premiumToppingCounts, menu.premiumToppings]);
 
-  const unitPrice = useMemo(() => size.price + premiumTotal, [size.price, premiumTotal]);
+  const isPromo = useMemo(() => isDiscountActive(size), [size]);
+  const activeBasePrice = isPromo ? size.price : (size.originalPrice ?? size.price);
+  const unitPrice = useMemo(() => activeBasePrice + premiumTotal, [activeBasePrice, premiumTotal]);
 
   const handleConfirm = useCallback(() => {
     const premiumItems = Object.entries(premiumToppingCounts)
@@ -99,7 +101,6 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
     onClose();
   }, [size, selectedBase, selectedFreeToppings, premiumToppingCounts, selectedSyrups, notes, unitPrice, menu.premiumToppings, onAddToCart, onClose]);
 
-  const isPromo = useMemo(() => isDiscountActive(size), [size]);
   const remainingTime = useMemo(
     () => isPromo ? getRemainingHoursText(size.discountExpiresAt) : null,
     [isPromo, size.discountExpiresAt]
@@ -348,7 +349,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
             <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Total deste item</div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-purple-950 dark:text-amber-400">{formatCurrency(unitPrice)}</span>
-              {(size.discountPercent || 0) > 0 && (size.originalPrice || size.price) > size.price && (
+              {isPromo && (size.originalPrice || size.price) > size.price && (
                 <span className="line-through text-xs font-bold text-slate-400 dark:text-slate-500">
                   {formatCurrency((size.originalPrice || size.price) + premiumTotal)}
                 </span>

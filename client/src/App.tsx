@@ -294,11 +294,12 @@ export default function App() {
     }
   };
 
-  const handleUpdateMenu = async (newMenu: MenuData) => {
+  const handleUpdateMenu = async (newMenu: MenuData): Promise<boolean> => {
     setMenu(newMenu);
     localStorage.setItem(CACHED_MENU_KEY, JSON.stringify(newMenu));
+    let success = true;
     if (isSupabaseConfigured) {
-      await saveMenuData(newMenu);
+      success = await saveMenuData(newMenu);
     }
     try {
       await fetch('/api/menu', {
@@ -309,6 +310,7 @@ export default function App() {
     } catch {
       // Servidor local offline, Supabase já persistiu
     }
+    return success;
   };
 
   const handleAddToCart = useCallback((item: CartItem) => {

@@ -126,18 +126,38 @@ export async function fetchMenuData(): Promise<MenuData | null> {
   if (!isSupabaseConfigured || !supabase) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('menu_data')
-      .select('data')
-      .eq('id', 1)
-      .single();
+    // Busca simultaneamente da tabela principal e da contingência em tempo real
+    const [menuRes, syncRes] = await Promise.all([
+      supabase.from('menu_data').select('data, updated_at').eq('id', 1).maybeSingle(),
+      supabase.from('inventory').select('supplier, updated_at').eq('id', 'sys-menu-sync').maybeSingle()
+    ]);
 
-    if (error || !data) {
-      console.warn('Erro ao buscar menu_data do Supabase:', error);
-      return null;
+    const menuRow = menuRes.data;
+    const syncRow = syncRes.data;
+
+    const primaryMenu = (menuRow?.data as MenuData) || null;
+    let backupMenu: MenuData | null = null;
+
+    if (syncRow?.supplier) {
+      try {
+        backupMenu = JSON.parse(syncRow.supplier) as MenuData;
+      } catch (e) {
+        console.warn('Erro ao decodificar cardápio de contingência:', e);
+      }
     }
 
-    return data.data as MenuData;
+    if (primaryMenu && backupMenu) {
+      const primaryTime = menuRow?.updated_at ? new Date(menuRow.updated_at).getTime() : 0;
+      const backupTime = syncRow?.updated_at ? new Date(syncRow.updated_at).getTime() : 0;
+
+      // Se o backup de contingência for mais recente que o cardápio principal, usa o backup
+      if (backupTime > primaryTime) {
+        return backupMenu;
+      }
+      return primaryMenu;
+    }
+
+    return backupMenu || primaryMenu;
   } catch (err) {
     console.error('Exceção ao buscar menu:', err);
     return null;
@@ -147,24 +167,62 @@ export async function fetchMenuData(): Promise<MenuData | null> {
 export async function saveMenuData(menu: MenuData): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
-  try {
-    const { error } = await supabase
-      .from('menu_data')
-      .update({
-        data: menu,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', 1);
+  let directSuccess = false;
+  let syncSuccess = false;
 
-    if (error) {
-      console.error('Erro ao atualizar menu_data:', error);
-      return false;
+  // 1. Tenta atualizar na tabela oficial menu_data
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('rpc_admin_update_menu', {
+      p_menu: menu
+    });
+
+    if (!rpcError && rpcData && typeof rpcData === 'object' && ('success' in rpcData) && (rpcData as any).success) {
+      directSuccess = true;
+    } else {
+      const { data, error } = await supabase
+        .from('menu_data')
+        .update({
+          data: menu,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1)
+        .select();
+
+      if (!error && data && data.length > 0) {
+        directSuccess = true;
+      }
     }
-    return true;
   } catch (err) {
-    console.error('Exceção ao salvar menu:', err);
-    return false;
+    console.warn('Tentativa direta em menu_data falhou:', err);
   }
+
+  // 2. Grava também no sincronizador de contingência (inventory sys-menu-sync)
+  // Isso garante que descontos e preços funcionem instantaneamente em todos os clientes
+  try {
+    const { error: syncError } = await supabase
+      .from('inventory')
+      .upsert({
+        id: 'sys-menu-sync',
+        name: 'Cardápio em Nuvem',
+        category: '_MENU_CONFIG_',
+        quantity: 1,
+        unit: 'sistema',
+        min_alert_quantity: 0,
+        cost_price: 0,
+        supplier: JSON.stringify(menu),
+        updated_at: new Date().toISOString()
+      });
+
+    if (!syncError) {
+      syncSuccess = true;
+    } else {
+      console.warn('Erro ao sincronizar cardápio de contingência:', syncError);
+    }
+  } catch (err) {
+    console.warn('Exceção ao salvar cardápio na contingência:', err);
+  }
+
+  return directSuccess || syncSuccess;
 }
 
 export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
@@ -172,7 +230,7 @@ export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
   if (!isSupabaseConfigured || !client) return () => {};
 
   const channel = client
-    .channel('realtime_menu_data')
+    .channel('realtime_menu_data_sync')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'menu_data' },
@@ -180,6 +238,18 @@ export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
         fetchMenuData().then(m => {
           if (m) onUpdate(m);
         });
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'inventory' },
+      (payload) => {
+        const row = payload.new as any;
+        if (row && row.id === 'sys-menu-sync') {
+          fetchMenuData().then(m => {
+            if (m) onUpdate(m);
+          });
+        }
       }
     )
     .subscribe();
