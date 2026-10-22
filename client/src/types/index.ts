@@ -101,6 +101,7 @@ export interface Order {
   deliveryFee: number;
   total: number;
   notes?: string;
+  cancellationReason?: string;
 }
 
 export interface InventoryItem {

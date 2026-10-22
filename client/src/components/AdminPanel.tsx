@@ -93,6 +93,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     supplier: ''
   });
 
+  // Modal de Recusa de Pedido
+  const [rejectModalOrder, setRejectModalOrder] = useState<Order | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>('Ingredientes ou produtos esgotados no momento');
+  const [customRejectionReason, setCustomRejectionReason] = useState<string>('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
@@ -174,22 +180,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, []);
 
-  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus, cancellationReason?: string) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { 
+      ...o, 
+      status: newStatus,
+      cancellationReason: cancellationReason || o.cancellationReason
+    } : o));
 
     if (isSupabaseConfigured) {
-      await updateSupabaseOrderStatus(orderId, newStatus);
+      await updateSupabaseOrderStatus(orderId, newStatus, cancellationReason);
     }
 
     try {
       await fetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify({ 
+          status: newStatus,
+          notes: cancellationReason ? `[RECUSADO: ${cancellationReason}]` : undefined
+        })
       });
     } catch {
       // offline fallback
     }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectModalOrder) return;
+    const finalReason = rejectionReason === 'OUTRO'
+      ? (customRejectionReason.trim() || 'Pedido não pôde ser aceito no momento')
+      : rejectionReason;
+
+    setIsSubmittingReject(true);
+    await updateOrderStatus(rejectModalOrder.id, 'CANCELADO', finalReason);
+    setIsSubmittingReject(false);
+    setRejectModalOrder(null);
+    setCustomRejectionReason('');
   };
 
   // Funções de Estoque
@@ -712,23 +738,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
                     {order.status === 'NOVO' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'PREPARANDO')}
-                        className="w-full bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                      >
-                        <ChefHat className="w-4 h-4" />
-                        <span>Aceitar e Iniciar Preparo</span>
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'PREPARANDO')}
+                          className="flex-1 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <ChefHat className="w-4 h-4" />
+                          <span>Aceitar e Preparar</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRejectModalOrder(order);
+                            setRejectionReason('Ingredientes ou produtos esgotados no momento');
+                            setCustomRejectionReason('');
+                          }}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+                          title="Não aceitar / Recusar pedido"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                          <span>Não Aceitar</span>
+                        </button>
+                      </div>
                     )}
 
                     {order.status === 'PREPARANDO' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'A_CAMINHO')}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                      >
-                        <Bike className="w-4 h-4" />
-                        <span>{order.orderType === 'ENTREGA' ? 'Despachar Entrega' : 'Pronto p/ Retirada'}</span>
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'A_CAMINHO')}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Bike className="w-4 h-4" />
+                          <span>{order.orderType === 'ENTREGA' ? 'Despachar Entrega' : 'Pronto p/ Retirada'}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRejectModalOrder(order);
+                            setRejectionReason('Alta demanda / Fila de espera muito longa');
+                            setCustomRejectionReason('');
+                          }}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-bold py-2.5 px-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          title="Cancelar pedido"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                          <span>Cancelar</span>
+                        </button>
+                      </div>
                     )}
 
                     {order.status === 'A_CAMINHO' && (
@@ -739,6 +793,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <CheckCircle className="w-4 h-4" />
                         <span>Finalizar Pedido</span>
                       </button>
+                    )}
+
+                    {order.status === 'CANCELADO' && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl text-xs space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-red-800">
+                          <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                          <span>Pedido Não Aceito / Cancelado</span>
+                        </p>
+                        {order.cancellationReason && (
+                          <p className="text-[11px] text-red-600 italic">
+                            Motivo: "{order.cancellationReason}"
+                          </p>
+                        )}
+                      </div>
                     )}
 
                     <div className="flex items-center gap-2">
@@ -1634,6 +1702,106 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           settings={settings}
           onClose={() => setSelectedOrderForPrint(null)}
         />
+      )}
+
+      {/* Modal de Confirmação de Recusa do Pedido */}
+      {rejectModalOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-red-200 dark:border-red-900/50 flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-5 text-center relative">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 mx-auto flex items-center justify-center mb-2">
+                <XCircle className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-black text-lg">Não Aceitar Pedido</h3>
+              <p className="text-red-100 text-xs font-mono font-bold mt-0.5">{rejectModalOrder.id} • {rejectModalOrder.customerName}</p>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-800 dark:text-slate-200 block mb-2">
+                  Selecione o motivo da recusa (o cliente verá este aviso imediatamente):
+                </label>
+                <div className="space-y-1.5">
+                  {[
+                    'Ingredientes ou produtos esgotados no momento',
+                    'Endereço fora da nossa área de entrega',
+                    'Alta demanda / Fila de espera muito longa',
+                    'Loja precisou encerrar o atendimento mais cedo',
+                    'OUTRO'
+                  ].map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setRejectionReason(option)}
+                      className={`w-full text-left p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
+                        rejectionReason === option
+                          ? 'border-red-500 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200 font-bold'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{option === 'OUTRO' ? 'Outro motivo (digitar)' : option}</span>
+                      {rejectionReason === option && <Check className="w-4 h-4 text-red-600 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {rejectionReason === 'OUTRO' && (
+                <div>
+                  <label className="font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                    Digite o motivo que será mostrado ao cliente:
+                  </label>
+                  <textarea
+                    value={customRejectionReason}
+                    onChange={(e) => setCustomRejectionReason(e.target.value)}
+                    placeholder="Ex: Acabou o cupuaçu e as barcas de 1L..."
+                    rows={2}
+                    className="w-full p-2.5 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-red-400 outline-none resize-none"
+                  />
+                </div>
+              )}
+
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 p-3 rounded-2xl text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Aviso Importante</span>
+                </p>
+                <p>
+                  Ao confirmar, o status mudará para Cancelado e o cliente receberá na hora a notificação com este motivo em tempo real no celular dele.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalOrder(null)}
+                disabled={isSubmittingReject}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 text-xs transition-colors cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={isSubmittingReject}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs transition-colors cursor-pointer shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isSubmittingReject ? (
+                  <span>Recusando...</span>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Confirmar Recusa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

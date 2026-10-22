@@ -43,3 +43,44 @@ export function playOrderAlert() {
     console.warn("Não foi possível reproduzir som de alerta:", e);
   }
 }
+
+export function playCancellationAlert() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    if (!cachedAudioCtx || cachedAudioCtx.state === 'closed') {
+      cachedAudioCtx = new AudioContextClass();
+    }
+    const ctx = cachedAudioCtx;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const now = ctx.currentTime;
+    const notes = [
+      { freq: 440.00, time: 0, duration: 0.18 },
+      { freq: 329.63, time: 0.18, duration: 0.35 }
+    ];
+
+    notes.forEach(({ freq, time, duration }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + time);
+
+      gain.gain.setValueAtTime(0, now + time);
+      gain.gain.linearRampToValueAtTime(0.22, now + time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + time + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + time);
+      osc.stop(now + time + duration);
+    });
+  } catch (e) {
+    console.warn("Não foi possível reproduzir som de cancelamento:", e);
+  }
+}

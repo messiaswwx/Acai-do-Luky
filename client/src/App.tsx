@@ -19,8 +19,11 @@ import {
   saveStoreSettings, 
   saveMenuData,
   subscribeToStoreSettings,
-  subscribeToMenuData
+  subscribeToMenuData,
+  fetchOrderById,
+  subscribeToOrder
 } from './services/supabaseService';
+import { playCancellationAlert } from './utils/audio';
 import { 
   Clock, 
   MapPin, 
@@ -33,7 +36,8 @@ import {
   Heart, 
   Star, 
   Flame, 
-  ShoppingBag
+  ShoppingBag,
+  XCircle
 } from 'lucide-react';
 
 const INITIAL_SETTINGS: StoreSettings = {
@@ -131,7 +135,8 @@ export default function App() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [activeTrackingOrder, setActiveTrackingOrder] = useState<Order | null>(null);
+  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
 
   // Fetch settings & menu from Supabase (ou fallback para backend local)
   const fetchData = async () => {
@@ -178,18 +183,61 @@ export default function App() {
   useEffect(() => {
     const savedOrderId = localStorage.getItem('luky_active_order_id');
     if (savedOrderId) {
-      fetch(`/api/orders/${savedOrderId}`)
-        .then(res => res.ok ? res.json() : null)
-        .then(order => {
-          if (order && order.status !== 'CANCELADO') {
-            setActiveTrackingOrder(order);
-          } else {
-            localStorage.removeItem('luky_active_order_id');
+      if (isSupabaseConfigured) {
+        fetchOrderById(savedOrderId).then(order => {
+          if (order) {
+            setActiveOrder(order);
+            if (order.status === 'CANCELADO') {
+              setIsTrackingModalOpen(true);
+            }
           }
-        })
-        .catch(() => {});
+        });
+      } else {
+        fetch(`/api/orders/${savedOrderId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(order => {
+            if (order) {
+              setActiveOrder(order);
+              if (order.status === 'CANCELADO') {
+                setIsTrackingModalOpen(true);
+              }
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, []);
+
+  // Monitora alterações em tempo real no pedido ativo do cliente
+  useEffect(() => {
+    if (!activeOrder?.id) return;
+
+    const handleActiveOrderUpdate = (updated: Order) => {
+      if (updated.id === activeOrder.id) {
+        if (activeOrder.status !== 'CANCELADO' && updated.status === 'CANCELADO') {
+          playCancellationAlert();
+          setIsTrackingModalOpen(true);
+        }
+        setActiveOrder(updated);
+      }
+    };
+
+    const socket = getSocket();
+    socket.emit('track_order', activeOrder.id);
+    socket.on('my_order_update', handleActiveOrderUpdate);
+    socket.on('order_status_updated', handleActiveOrderUpdate);
+
+    let unsubSupabase = () => {};
+    if (isSupabaseConfigured) {
+      unsubSupabase = subscribeToOrder(activeOrder.id, handleActiveOrderUpdate);
+    }
+
+    return () => {
+      socket.off('my_order_update', handleActiveOrderUpdate);
+      socket.off('order_status_updated', handleActiveOrderUpdate);
+      unsubSupabase();
+    };
+  }, [activeOrder?.id, activeOrder?.status]);
 
   useEffect(() => {
     fetchData();
@@ -290,18 +338,20 @@ export default function App() {
     setCartItems([]);
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
-    setActiveTrackingOrder(order);
+    setActiveOrder(order);
+    setIsTrackingModalOpen(true);
     localStorage.setItem('luky_active_order_id', order.id);
   }, []);
 
   const handleCloseTracking = useCallback(() => {
-    setActiveTrackingOrder(null);
+    setIsTrackingModalOpen(false);
   }, []);
 
   const handleNewOrder = useCallback(() => {
-    setActiveTrackingOrder(null);
-    setCartItems([]);
     localStorage.removeItem('luky_active_order_id');
+    setActiveOrder(null);
+    setIsTrackingModalOpen(false);
+    setCartItems([]);
   }, []);
 
   const handleAdminLogout = useCallback(() => {
@@ -358,13 +408,26 @@ export default function App() {
                     <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
 
                     {/* Botão para rastrear pedido ativo caso o cliente já tenha feito um */}
-                    {activeTrackingOrder && (
+                    {activeOrder && (
                       <button
-                        onClick={() => setActiveTrackingOrder(activeTrackingOrder)}
-                        className="bg-amber-400 text-purple-950 px-3 py-1 rounded-full text-xs font-black shadow-xs flex items-center gap-1 cursor-pointer animate-pulse"
+                        onClick={() => setIsTrackingModalOpen(true)}
+                        className={`px-3 py-1 rounded-full text-xs font-black shadow-xs flex items-center gap-1.5 cursor-pointer transition-all ${
+                          activeOrder.status === 'CANCELADO'
+                            ? 'bg-red-500 text-white animate-bounce ring-2 ring-red-300'
+                            : 'bg-amber-400 text-purple-950 animate-pulse'
+                        }`}
                       >
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Acompanhar Pedido</span>
+                        {activeOrder.status === 'CANCELADO' ? (
+                          <>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Pedido Não Aceito (Ver Aviso)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Acompanhar Pedido</span>
+                          </>
+                        )}
                       </button>
                     )}
 
@@ -386,6 +449,33 @@ export default function App() {
 
               {/* Conteúdo Principal do Cliente */}
               <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 space-y-6">
+                {/* Banner de Aviso de Pedido Não Aceito (se o cliente tiver minimizado o modal) */}
+                {activeOrder && activeOrder.status === 'CANCELADO' && !isTrackingModalOpen && (
+                  <div 
+                    onClick={() => setIsTrackingModalOpen(true)}
+                    className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-3xl shadow-xl border-2 border-red-400 flex flex-col sm:flex-row items-center justify-between gap-4 cursor-pointer hover:opacity-95 transition-all animate-in fade-in slide-in-from-top-2"
+                  >
+                    <div className="flex items-center gap-3.5 text-center sm:text-left">
+                      <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                        <XCircle className="w-7 h-7 text-amber-300" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-base tracking-wide flex items-center justify-center sm:justify-start gap-2">
+                          <span>Atenção: Seu pedido #{activeOrder.id} não pôde ser aceito!</span>
+                        </h3>
+                        <p className="text-xs text-red-100 mt-1 max-w-xl leading-relaxed">
+                          {activeOrder.cancellationReason
+                            ? `Motivo: "${activeOrder.cancellationReason}"`
+                            : 'Infelizmente o estabelecimento não pôde atender seu pedido. Clique para ver detalhes e falar com o lojista.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 bg-white text-red-700 hover:bg-red-50 px-4 py-2 rounded-2xl font-black text-xs shadow-md transition-colors">
+                      Ver Aviso Completo
+                    </div>
+                  </div>
+                )}
+
                 {/* Alerta de Loja Fechada */}
                 {!isInitialLoading && !settings.isOpen && (
                   <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-3xl shadow-xl border border-red-500/50 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -737,9 +827,9 @@ export default function App() {
                 />
               )}
 
-              {activeTrackingOrder && (
+              {activeOrder && isTrackingModalOpen && (
                 <OrderTrackingModal
-                  order={activeTrackingOrder}
+                  order={activeOrder}
                   settings={settings}
                   onClose={handleCloseTracking}
                   onNewOrder={handleNewOrder}

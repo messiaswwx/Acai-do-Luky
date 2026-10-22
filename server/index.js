@@ -465,7 +465,7 @@ app.post('/api/orders', (req, res) => {
 });
 
 app.patch('/api/orders/:id/status', (req, res) => {
-  const { status } = req.body;
+  const { status, notes } = req.body;
   const orderIndex = db.orders.findIndex(o => o.id === req.params.id);
 
   if (orderIndex === -1) {
@@ -473,6 +473,13 @@ app.patch('/api/orders/:id/status', (req, res) => {
   }
 
   db.orders[orderIndex].status = status;
+  if (notes !== undefined) {
+    db.orders[orderIndex].notes = notes;
+    const match = notes.match(/\[(?:RECUSADO|CANCELADO):\s*([^\]]+)\]/i);
+    if (match) {
+      db.orders[orderIndex].cancellationReason = match[1].trim();
+    }
+  }
   db.orders[orderIndex].updatedAt = new Date().toISOString();
   saveDatabase(db);
 

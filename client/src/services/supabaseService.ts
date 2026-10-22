@@ -193,6 +193,42 @@ export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
 // PEDIDOS (ORDERS)
 // ==============================================================================
 
+export function parseOrderRow(row: any): Order {
+  const rawNotes = row.notes || '';
+  let cancellationReason: string | undefined = undefined;
+  let cleanNotes = rawNotes;
+
+  const match = rawNotes.match(/\[(?:RECUSADO|CANCELADO):\s*([^\]]+)\]/i);
+  if (match) {
+    cancellationReason = match[1].trim();
+    cleanNotes = rawNotes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*/i, '').trim();
+  }
+
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    status: row.status as OrderStatus,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    orderType: row.delivery_type,
+    address: row.address ? {
+      street: row.address,
+      number: row.number || '',
+      neighborhood: row.neighborhood || '',
+      complement: row.complement || '',
+      reference: row.reference || ''
+    } : undefined,
+    paymentMethod: row.payment_method,
+    paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
+    items: row.items || [],
+    subtotal: Number(row.subtotal),
+    deliveryFee: Number(row.delivery_fee),
+    total: Number(row.total),
+    notes: cleanNotes || undefined,
+    cancellationReason
+  };
+}
+
 export async function fetchOrders(): Promise<Order[]> {
   if (!isSupabaseConfigured || !supabase) return [];
 
@@ -207,31 +243,29 @@ export async function fetchOrders(): Promise<Order[]> {
       return [];
     }
 
-    return data.map((row: any) => ({
-      id: row.id,
-      createdAt: row.created_at,
-      status: row.status as OrderStatus,
-      customerName: row.customer_name,
-      customerPhone: row.customer_phone,
-      orderType: row.delivery_type,
-      address: row.address ? {
-        street: row.address,
-        number: row.number || '',
-        neighborhood: row.neighborhood || '',
-        complement: row.complement || '',
-        reference: row.reference || ''
-      } : undefined,
-      paymentMethod: row.payment_method,
-      paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
-      items: row.items || [],
-      subtotal: Number(row.subtotal),
-      deliveryFee: Number(row.delivery_fee),
-      total: Number(row.total),
-      notes: row.notes
-    }));
+    return data.map(parseOrderRow);
   } catch (err) {
     console.error('Exceção ao buscar pedidos:', err);
     return [];
+  }
+}
+
+export async function fetchOrderById(orderId: string): Promise<Order | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (error || !data) return null;
+
+    return parseOrderRow(data);
+  } catch (err) {
+    console.error('Exceção ao buscar pedido por id:', err);
+    return null;
   }
 }
 
@@ -271,28 +305,40 @@ export async function createOrder(order: Partial<Order>): Promise<Order | null> 
       return null;
     }
 
-    return {
-      ...order,
-      id: data.id,
-      createdAt: data.created_at,
-      status: data.status
-    } as Order;
+    return parseOrderRow(data);
   } catch (err) {
     console.error('Exceção ao criar pedido:', err);
     return null;
   }
 }
 
-export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<boolean> {
+export async function updateOrderStatus(
+  orderId: string, 
+  newStatus: OrderStatus, 
+  cancellationReason?: string
+): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
+    const updatePayload: Record<string, any> = {
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    };
+
+    if (cancellationReason) {
+      const { data: current } = await supabase
+        .from('orders')
+        .select('notes')
+        .eq('id', orderId)
+        .single();
+
+      const existingNotes = current?.notes ? current.notes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*/i, '').trim() : '';
+      updatePayload.notes = `[RECUSADO: ${cancellationReason.trim()}]${existingNotes ? ` | ${existingNotes}` : ''}`;
+    }
+
     const { error } = await supabase
       .from('orders')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', orderId);
 
     if (error) {
@@ -400,60 +446,43 @@ export function subscribeToOrders(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'orders' },
       (payload) => {
-        const row = payload.new;
-        const newOrder: Order = {
-          id: row.id,
-          createdAt: row.created_at,
-          status: row.status as OrderStatus,
-          customerName: row.customer_name,
-          customerPhone: row.customer_phone,
-          orderType: row.delivery_type,
-          address: row.address ? {
-            street: row.address,
-            number: row.number || '',
-            neighborhood: row.neighborhood || '',
-            complement: row.complement || '',
-            reference: row.reference || ''
-          } : undefined,
-          paymentMethod: row.payment_method,
-          paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
-          items: row.items || [],
-          subtotal: Number(row.subtotal),
-          deliveryFee: Number(row.delivery_fee),
-          total: Number(row.total),
-          notes: row.notes
-        };
-        onNewOrder(newOrder);
+        onNewOrder(parseOrderRow(payload.new));
       }
     )
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'orders' },
       (payload) => {
-        const row = payload.new;
-        const updatedOrder: Order = {
-          id: row.id,
-          createdAt: row.created_at,
-          status: row.status as OrderStatus,
-          customerName: row.customer_name,
-          customerPhone: row.customer_phone,
-          orderType: row.delivery_type,
-          address: row.address ? {
-            street: row.address,
-            number: row.number || '',
-            neighborhood: row.neighborhood || '',
-            complement: row.complement || '',
-            reference: row.reference || ''
-          } : undefined,
-          paymentMethod: row.payment_method,
-          paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
-          items: row.items || [],
-          subtotal: Number(row.subtotal),
-          deliveryFee: Number(row.delivery_fee),
-          total: Number(row.total),
-          notes: row.notes
-        };
-        onUpdateOrder(updatedOrder);
+        onUpdateOrder(parseOrderRow(payload.new));
+      }
+    )
+    .subscribe();
+
+  return () => {
+    if (supabase) {
+      supabase.removeChannel(channel);
+    }
+  };
+}
+
+export function subscribeToOrder(
+  orderId: string,
+  onUpdate: (order: Order) => void
+) {
+  if (!isSupabaseConfigured || !supabase) return () => {};
+
+  const channel = supabase
+    .channel(`order-track-${orderId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `id=eq.${orderId}`
+      },
+      (payload) => {
+        onUpdate(parseOrderRow(payload.new));
       }
     )
     .subscribe();
