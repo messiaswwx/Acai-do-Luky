@@ -92,7 +92,13 @@ const DEFAULT_DATA = {
     ]
   },
   orders: [],
-  trustedDevices: []
+  trustedDevices: [],
+  inventory: [
+    { id: 'est-copo-300', name: 'Copos Descartáveis 300ml (C/ Tampa)', category: 'EMBALAGENS', quantity: 150, unit: 'un', min_alert_quantity: 30, cost_price: 0.40, supplier: 'Embalagens Silva' },
+    { id: 'est-copo-500', name: 'Copos Descartáveis 500ml (C/ Tampa)', category: 'EMBALAGENS', quantity: 120, unit: 'un', min_alert_quantity: 30, cost_price: 0.50, supplier: 'Embalagens Silva' },
+    { id: 'est-copo-700', name: 'Copos Descartáveis 700ml (C/ Tampa)', category: 'EMBALAGENS', quantity: 80, unit: 'un', min_alert_quantity: 20, cost_price: 0.65, supplier: 'Embalagens Silva' },
+    { id: 'est-copo-1000', name: 'Barcas Descartáveis 1 Litro (C/ Tampa)', category: 'EMBALAGENS', quantity: 50, unit: 'un', min_alert_quantity: 15, cost_price: 1.20, supplier: 'Embalagens Silva' }
+  ]
 };
 
 function loadDatabase() {
@@ -106,6 +112,9 @@ function loadDatabase() {
       }
       if (!Array.isArray(parsed.trustedDevices)) {
         parsed.trustedDevices = [];
+      }
+      if (!Array.isArray(parsed.inventory)) {
+        parsed.inventory = DEFAULT_DATA.inventory;
       }
       return parsed;
     }
@@ -437,6 +446,50 @@ app.put('/api/menu', (req, res) => {
   res.json(db.menu);
 });
 
+function getPackagingInventoryId(sizeIdOrName) {
+  const s = String(sizeIdOrName || '').toLowerCase();
+  if (s.includes('300')) return 'est-copo-300';
+  if (s.includes('500')) return 'est-copo-500';
+  if (s.includes('700')) return 'est-copo-700';
+  if (s.includes('1000') || s.includes('litro') || s.includes('barca')) return 'est-copo-1000';
+  return null;
+}
+
+function adjustPackagingStock(items, direction) {
+  if (!Array.isArray(items) || !Array.isArray(db.inventory)) return;
+
+  for (const it of items) {
+    const sizeStr = it.size?.id || it.size?.name || '';
+    const pkgId = getPackagingInventoryId(sizeStr);
+    if (pkgId) {
+      const pkg = db.inventory.find(p => p.id === pkgId);
+      if (pkg) {
+        const qty = Number(it.quantity) || 1;
+        pkg.quantity = direction === 'DECREMENT' ? Math.max(0, pkg.quantity - qty) : pkg.quantity + qty;
+        pkg.updated_at = new Date().toISOString();
+      }
+    }
+  }
+  saveDatabase(db);
+  io.emit('inventory_updated', db.inventory);
+}
+
+app.get('/api/inventory', (req, res) => {
+  res.json(db.inventory || []);
+});
+
+app.patch('/api/inventory/:id', (req, res) => {
+  const { quantity } = req.body;
+  if (!Array.isArray(db.inventory)) db.inventory = [];
+  const item = db.inventory.find(i => i.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item não encontrado' });
+  item.quantity = Math.max(0, Number(quantity) || 0);
+  item.updated_at = new Date().toISOString();
+  saveDatabase(db);
+  io.emit('inventory_updated', db.inventory);
+  res.json(item);
+});
+
 app.get('/api/orders', (req, res) => {
   res.json(db.orders);
 });
@@ -456,6 +509,12 @@ app.post('/api/orders', (req, res) => {
   };
 
   db.orders.unshift(newOrder);
+
+  // Sincroniza estoque de embalagens automaticamente
+  if (Array.isArray(newOrder.items)) {
+    adjustPackagingStock(newOrder.items, 'DECREMENT');
+  }
+
   saveDatabase(db);
 
   // Emite evento em tempo real para a cozinha/painel do Kayky
@@ -472,6 +531,7 @@ app.patch('/api/orders/:id/status', (req, res) => {
     return res.status(404).json({ error: "Pedido não encontrado" });
   }
 
+  const previousStatus = db.orders[orderIndex].status;
   db.orders[orderIndex].status = status;
   if (notes !== undefined) {
     db.orders[orderIndex].notes = notes;
@@ -480,6 +540,12 @@ app.patch('/api/orders/:id/status', (req, res) => {
       db.orders[orderIndex].cancellationReason = match[1].trim();
     }
   }
+
+  // Estorna embalagem caso pedido tenha sido cancelado/recusado
+  if (previousStatus !== 'CANCELADO' && status === 'CANCELADO' && Array.isArray(db.orders[orderIndex].items)) {
+    adjustPackagingStock(db.orders[orderIndex].items, 'RESTORE');
+  }
+
   db.orders[orderIndex].updatedAt = new Date().toISOString();
   saveDatabase(db);
 

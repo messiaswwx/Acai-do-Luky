@@ -11,7 +11,8 @@ import {
   subscribeToOrders,
   fetchInventory,
   updateInventoryQuantity,
-  saveInventoryItem
+  saveInventoryItem,
+  subscribeToInventory
 } from '../services/supabaseService';
 import { PrintReceipt } from './PrintReceipt';
 import { 
@@ -78,19 +79,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [savingMenu, setSavingMenu] = useState(false);
   const [menuSavedFeedback, setMenuSavedFeedback] = useState(false);
 
-  // Controle de Estoque
+  // Controle de Estoque (Foco Exclusivo em Embalagens)
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [inventoryCategory, setInventoryCategory] = useState<string>('TODOS');
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [newItemModal, setNewItemModal] = useState(false);
   const [newItemForm, setNewItemForm] = useState({
     name: '',
-    category: 'COMPLEMENTOS',
-    quantity: 10,
+    category: 'EMBALAGENS',
+    quantity: 50,
     unit: 'un',
-    min_alert_quantity: 3,
-    cost_price: 0,
-    supplier: ''
+    min_alert_quantity: 15,
+    cost_price: 0.50,
+    supplier: 'Distribuidora de Embalagens'
   });
 
   // Modal de Recusa de Pedido
@@ -166,17 +166,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // Supabase Realtime (se configurado)
     let unsubscribeSupabase = () => {};
+    let unsubscribeInventory = () => {};
     if (isSupabaseConfigured) {
       unsubscribeSupabase = subscribeToOrders(
         (newOrder) => handleNewOrder(newOrder),
         (updatedOrder) => handleOrderStatus(updatedOrder)
       );
+
+      unsubscribeInventory = subscribeToInventory((updatedItem) => {
+        setInventory(prev => {
+          const exists = prev.some(i => i.id === updatedItem.id);
+          if (exists) {
+            return prev.map(i => i.id === updatedItem.id ? updatedItem : i);
+          }
+          return [...prev, updatedItem];
+        });
+      });
     }
 
     return () => {
       socket.off('new_order', handleNewOrder);
       socket.off('order_status_updated', handleOrderStatus);
       unsubscribeSupabase();
+      unsubscribeInventory();
     };
   }, []);
 
@@ -250,12 +262,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewItemModal(false);
     setNewItemForm({
       name: '',
-      category: 'COMPLEMENTOS',
-      quantity: 10,
+      category: 'EMBALAGENS',
+      quantity: 50,
       unit: 'un',
-      min_alert_quantity: 3,
-      cost_price: 0,
-      supplier: ''
+      min_alert_quantity: 15,
+      cost_price: 0.50,
+      supplier: 'Distribuidora de Embalagens'
     });
   };
 
@@ -263,10 +275,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return inventory.filter(i => i.quantity <= i.min_alert_quantity);
   }, [inventory]);
 
+  const totalPackagingUnits = useMemo(() => {
+    return inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  }, [inventory]);
+
   const filteredInventory = useMemo(() => {
-    if (inventoryCategory === 'TODOS') return inventory;
-    return inventory.filter(i => i.category === inventoryCategory);
-  }, [inventory, inventoryCategory]);
+    return inventory;
+  }, [inventory]);
 
   // Price & Discount editing handlers
   const handleSizeOriginalPriceChange = (sizeId: string, val: number) => {
@@ -570,7 +585,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           }`}
         >
           <Boxes className="w-4 h-4" />
-          <span>Controle de Estoque ({inventory.length})</span>
+          <span>Estoque de Embalagens ({inventory.length})</span>
           {lowStockItems.length > 0 && (
             <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
               {lowStockItems.length}
@@ -1185,7 +1200,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 3: CONTROLE DE ESTOQUE */}
+      {/* TAB 3: CONTROLE DE ESTOQUE (FOCO EXCLUSIVO EM EMBALAGENS) */}
       {activeTab === 'ESTOQUE' && (
         <div className="space-y-5">
           {/* Header & Quick Actions */}
@@ -1193,10 +1208,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <Boxes className="w-5 h-5 text-purple-700 dark:text-purple-400" />
-                <h2 className="text-lg font-black text-slate-900 dark:text-white">Estoque de Ingredientes & Embalagens</h2>
+                <h2 className="text-lg font-black text-slate-900 dark:text-white">Estoque de Embalagens & Copos</h2>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Acompanhe o consumo diário de açaí, potes de Nutella, copos descartáveis e frutas.
+                Sincronizado em tempo real: cada copo ou barca comprado pelo cliente deduz automaticamente 1 unidade do estoque.
               </p>
             </div>
 
@@ -1216,146 +1231,148 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="px-4 py-2 bg-purple-800 hover:bg-purple-900 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-purple-950/20 active:scale-98 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Novo Item</span>
+                <span>Nova Embalagem</span>
               </button>
             </div>
           </div>
 
           {/* KPI Cards de Estoque */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0">
                 <Boxes className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase">Itens Cadastrados</span>
-                <div className="text-lg font-black text-slate-900">{inventory.length} produtos</div>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Total de Embalagens</span>
+                <div className="text-lg font-black text-slate-900 dark:text-white">{totalPackagingUnits} un</div>
+                <span className="text-[10px] text-slate-400">{inventory.length} tamanhos cadastrados</span>
               </div>
             </div>
 
             <div className={`p-4 rounded-2xl border flex items-center gap-3 ${
               lowStockItems.length > 0 
-                ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-300/30' 
-                : 'bg-white border-slate-200'
+                ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 ring-2 ring-amber-300/30' 
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
             }`}>
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                lowStockItems.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-700'
+                lowStockItems.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
               }`}>
                 {lowStockItems.length > 0 ? <AlertTriangle className="w-5 h-5" /> : <PackageCheck className="w-5 h-5" />}
               </div>
               <div>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase">Estoque Baixo / Alerta</span>
-                <div className={`text-lg font-black ${lowStockItems.length > 0 ? 'text-amber-950' : 'text-emerald-800'}`}>
-                  {lowStockItems.length > 0 ? `${lowStockItems.length} itens acabando!` : 'Tudo abastecido'}
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Estoque Baixo / Alerta</span>
+                <div className={`text-lg font-black ${lowStockItems.length > 0 ? 'text-amber-950 dark:text-amber-300' : 'text-emerald-800 dark:text-emerald-300'}`}>
+                  {lowStockItems.length > 0 ? `${lowStockItems.length} embalagens acabando!` : 'Tudo abastecido'}
                 </div>
+                <span className="text-[10px] text-slate-400">Abaixo do mínimo recomendado</span>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center shrink-0">
                 <CheckCircle className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase">Status do Banco</span>
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Baixa Automática</span>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mt-0.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Sincronizado na Nuvem</span>
+                  <span>Sincronizado com Pedidos ⚡</span>
                 </div>
+                <span className="text-[10px] text-slate-400">Deduz a cada venda aprovada</span>
               </div>
             </div>
           </div>
 
-          {/* Filtro de Categorias */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {['TODOS', 'AÇAÍ', 'EMBALAGENS', 'COMPLEMENTOS', 'FRUTAS', 'CALDAS'].map(cat => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setInventoryCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
-                  inventoryCategory === cat
-                    ? 'bg-purple-900 text-amber-300 shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-purple-50 hover:text-purple-900'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          {/* Grid de Itens do Estoque */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Grid de Itens do Estoque de Embalagens */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {filteredInventory.map(item => {
               const isLow = item.quantity <= item.min_alert_quantity;
-              const step = item.unit === 'un' && item.category === 'EMBALAGENS' ? 10 : 1;
 
               return (
                 <div
                   key={item.id}
-                  className={`bg-white rounded-3xl p-5 border-2 transition-all space-y-4 shadow-xs ${
+                  className={`bg-white dark:bg-slate-900 rounded-3xl p-5 border-2 transition-all space-y-4 shadow-xs ${
                     isLow 
-                      ? 'border-amber-400 bg-amber-50/20 ring-2 ring-amber-400/20' 
-                      : 'border-slate-200 hover:border-purple-300'
+                      ? 'border-amber-400 dark:border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 ring-2 ring-amber-400/20' 
+                      : 'border-slate-200 dark:border-slate-800 hover:border-purple-300'
                   }`}
                 >
                   {/* Top: Nome e Categoria */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <span className="text-[10px] font-black text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        {item.category}
+                      <span className="text-[10px] font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Embalagem
                       </span>
-                      <h3 className="font-black text-sm text-slate-900 mt-1">{item.name}</h3>
+                      <h3 className="font-black text-sm text-slate-900 dark:text-white mt-1.5">{item.name}</h3>
                       {item.supplier && (
-                        <p className="text-[11px] text-slate-400">Fornecedor: {item.supplier}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Fornecedor: {item.supplier}</p>
                       )}
                     </div>
 
                     {isLow && (
-                      <span className="bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse shrink-0">
-                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                      <span className="bg-amber-100 dark:bg-amber-950/60 border border-amber-300 text-amber-900 dark:text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse shrink-0">
+                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                         Baixo
                       </span>
                     )}
                   </div>
 
                   {/* Contador de Quantidade e Botões Rápidos */}
-                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] font-bold text-slate-400 uppercase block">Saldo Atual</span>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-purple-950 font-mono">
+                        <span className="text-2xl font-black text-purple-950 dark:text-amber-300 font-mono">
                           {item.quantity}
                         </span>
-                        <span className="text-xs font-bold text-slate-600">{item.unit}</span>
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{item.unit}</span>
                       </div>
                     </div>
 
-                    {/* Botões - e + */}
-                    <div className="flex items-center gap-1.5">
+                    {/* Botões -10, -1, +1, +10 */}
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => handleAdjustQuantity(item, -step)}
-                        className="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-red-50 hover:text-red-700 hover:border-red-300 flex items-center justify-center font-black text-slate-700 transition-colors cursor-pointer active:scale-95 shadow-xs"
-                        title={`Diminuir ${step} ${item.unit}`}
+                        onClick={() => handleAdjustQuantity(item, -10)}
+                        className="px-2 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 text-xs font-black text-slate-600 dark:text-slate-300 transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title="Diminuir 10 unidades"
                       >
-                        <Minus className="w-4 h-4" />
+                        -10
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => handleAdjustQuantity(item, step)}
-                        className="w-9 h-9 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 flex items-center justify-center font-black transition-colors cursor-pointer active:scale-95 shadow-xs"
-                        title={`Adicionar ${step} ${item.unit}`}
+                        onClick={() => handleAdjustQuantity(item, -1)}
+                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 text-xs font-black text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title="Diminuir 1 unidade"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustQuantity(item, 1)}
+                        className="w-8 h-8 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 text-xs font-black flex items-center justify-center transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title="Adicionar 1 unidade"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustQuantity(item, 10)}
+                        className="px-2 h-8 rounded-xl bg-purple-900 hover:bg-purple-950 text-amber-300 text-xs font-black transition-colors cursor-pointer active:scale-95 shadow-xs"
+                        title="Adicionar 10 unidades (1 pacote)"
+                      >
+                        +10
                       </button>
                     </div>
                   </div>
 
                   {/* Alerta de Estoque Mínimo */}
                   {isLow ? (
-                    <div className="text-[11px] font-bold text-amber-900 bg-amber-100/70 p-2 rounded-xl border border-amber-200 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <div className="text-[11px] font-bold text-amber-900 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 p-2 rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span>Comprar mais! Mínimo sugerido: {item.min_alert_quantity} {item.unit}</span>
                     </div>
                   ) : (
@@ -1369,19 +1386,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             })}
           </div>
 
-          {/* Modal de Cadastro de Novo Item */}
+          {/* Modal de Cadastro de Nova Embalagem */}
           {newItemModal && (
-            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-purple-200 space-y-4 animate-in zoom-in-95">
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-purple-200 dark:border-purple-900/50 space-y-4 animate-in zoom-in-95">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
-                    <Boxes className="w-5 h-5 text-purple-700" />
-                    <span>Cadastrar Item no Estoque</span>
+                  <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <Boxes className="w-5 h-5 text-purple-700 dark:text-purple-400" />
+                    <span>Cadastrar Nova Embalagem</span>
                   </h3>
                   <button
                     type="button"
                     onClick={() => setNewItemModal(false)}
-                    className="p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer"
                   >
                     <XCircle className="w-5 h-5" />
                   </button>
@@ -1389,78 +1406,75 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <form onSubmit={handleCreateInventoryItem} className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Item *</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nome da Embalagem *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: Leite Ninho Lata 400g"
+                      placeholder="Ex: Copo Descartável 400ml"
                       value={newItemForm.name}
                       onChange={e => setNewItemForm({ ...newItemForm, name: e.target.value })}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Categoria</label>
-                      <select
-                        value={newItemForm.category}
-                        onChange={e => setNewItemForm({ ...newItemForm, category: e.target.value })}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                      >
-                        <option value="AÇAÍ">Açaí</option>
-                        <option value="EMBALAGENS">Embalagens</option>
-                        <option value="COMPLEMENTOS">Complementos</option>
-                        <option value="FRUTAS">Frutas</option>
-                        <option value="CALDAS">Caldas</option>
-                      </select>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Unidade</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: un, caixas, pacotes"
+                        value={newItemForm.unit}
+                        onChange={e => setNewItemForm({ ...newItemForm, unit: e.target.value })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Unidade</label>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Quantidade Inicial</label>
                       <input
-                        type="text"
-                        placeholder="Ex: un, kg, latas, baldes"
-                        value={newItemForm.unit}
-                        onChange={e => setNewItemForm({ ...newItemForm, unit: e.target.value })}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={newItemForm.quantity}
+                        onChange={e => setNewItemForm({ ...newItemForm, quantity: parseFloat(e.target.value) || 0 })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Quantidade Atual</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={newItemForm.quantity}
-                        onChange={e => setNewItemForm({ ...newItemForm, quantity: parseFloat(e.target.value) || 0 })}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Alerta Mínimo</label>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Alerta Mínimo</label>
                       <input
                         type="number"
                         min="1"
                         value={newItemForm.min_alert_quantity}
                         onChange={e => setNewItemForm({ ...newItemForm, min_alert_quantity: parseFloat(e.target.value) || 1 })}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold"
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Custo Unitário (R$)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={newItemForm.cost_price}
+                        onChange={e => setNewItemForm({ ...newItemForm, cost_price: parseFloat(e.target.value) || 0 })}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Fornecedor (Opcional)</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Fornecedor (Opcional)</label>
                     <input
                       type="text"
-                      placeholder="Ex: Atacadão, Ceasa, Distribuidora"
+                      placeholder="Ex: Embalagens Silva, Distribuidora"
                       value={newItemForm.supplier}
                       onChange={e => setNewItemForm({ ...newItemForm, supplier: e.target.value })}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
                   </div>
 
@@ -1468,15 +1482,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => setNewItemModal(false)}
-                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                      className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 text-xs font-black text-white bg-purple-900 hover:bg-purple-950 rounded-xl shadow-md cursor-pointer"
+                      className="px-4 py-2 bg-purple-800 hover:bg-purple-900 text-white rounded-xl text-xs font-black shadow-md cursor-pointer"
                     >
-                      Salvar Item
+                      Salvar Embalagem
                     </button>
                   </div>
                 </form>

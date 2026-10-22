@@ -305,6 +305,11 @@ export async function createOrder(order: Partial<Order>): Promise<Order | null> 
       return null;
     }
 
+    // Sincroniza estoque: deduz 1 unidade de embalagem para cada copo/barca comprado
+    if (order.items && order.items.length > 0) {
+      await adjustPackagingStockForOrder(order.items, 'DECREMENT');
+    }
+
     return parseOrderRow(data);
   } catch (err) {
     console.error('Exceção ao criar pedido:', err);
@@ -336,6 +341,19 @@ export async function updateOrderStatus(
       updatePayload.notes = `[RECUSADO: ${cancellationReason.trim()}]${existingNotes ? ` | ${existingNotes}` : ''}`;
     }
 
+    if (newStatus === 'CANCELADO') {
+      // Estorna a embalagem que havia sido reservada para o pedido
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('items')
+        .eq('id', orderId)
+        .single();
+
+      if (orderData?.items && Array.isArray(orderData.items)) {
+        await adjustPackagingStockForOrder(orderData.items, 'RESTORE');
+      }
+    }
+
     const { error } = await supabase
       .from('orders')
       .update(updatePayload)
@@ -353,8 +371,77 @@ export async function updateOrderStatus(
 }
 
 // ==============================================================================
-// CONTROLE DE ESTOQUE (INVENTORY)
+// CONTROLE DE ESTOQUE (INVENTORY - FOCO EXCLUSIVO EM EMBALAGENS)
 // ==============================================================================
+
+/**
+ * Mapeia o item do pedido (tamanho do copo ou barca) para o id da embalagem no estoque.
+ */
+export function getPackagingInventoryId(sizeIdOrName: string): string | null {
+  const s = String(sizeIdOrName || '').toLowerCase();
+  if (s.includes('300')) return 'est-copo-300';
+  if (s.includes('500')) return 'est-copo-500';
+  if (s.includes('700')) return 'est-copo-700';
+  if (s.includes('1000') || s.includes('litro') || s.includes('barca')) return 'est-copo-1000';
+  return null;
+}
+
+/**
+ * Deduz ou estorna as embalagens no estoque de acordo com os copos comprados no pedido.
+ * Exemplo: 1 copo 300ml -> tira 1 unidade do estoque de Copos 300ml.
+ */
+export async function adjustPackagingStockForOrder(
+  items: any[],
+  direction: 'DECREMENT' | 'RESTORE' = 'DECREMENT'
+): Promise<void> {
+  if (!isSupabaseConfigured || !supabase || !items || !Array.isArray(items) || items.length === 0) return;
+
+  try {
+    const countsByPackagingId: Record<string, number> = {};
+
+    for (const item of items) {
+      const sizeId = item.size?.id || '';
+      const sizeName = item.size?.name || '';
+      const packagingId = getPackagingInventoryId(sizeId) || getPackagingInventoryId(sizeName);
+
+      if (packagingId) {
+        const qty = Number(item.quantity) || 1;
+        countsByPackagingId[packagingId] = (countsByPackagingId[packagingId] || 0) + qty;
+      }
+    }
+
+    const packagingIds = Object.keys(countsByPackagingId);
+    if (packagingIds.length === 0) return;
+
+    // Busca o estoque atual dessas embalagens
+    const { data: currentRows, error } = await supabase
+      .from('inventory')
+      .select('id, quantity')
+      .in('id', packagingIds);
+
+    if (error || !currentRows) return;
+
+    for (const row of currentRows) {
+      const change = countsByPackagingId[row.id] || 0;
+      if (change === 0) continue;
+
+      const currentQty = Number(row.quantity) || 0;
+      const newQty = direction === 'DECREMENT'
+        ? Math.max(0, currentQty - change)
+        : currentQty + change;
+
+      await supabase
+        .from('inventory')
+        .update({
+          quantity: newQty,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', row.id);
+    }
+  } catch (err) {
+    console.error('Erro ao ajustar estoque de embalagens do pedido:', err);
+  }
+}
 
 export async function fetchInventory(): Promise<InventoryItem[]> {
   if (!isSupabaseConfigured || !supabase) return [];
@@ -363,11 +450,11 @@ export async function fetchInventory(): Promise<InventoryItem[]> {
     const { data, error } = await supabase
       .from('inventory')
       .select('*')
-      .order('category', { ascending: true })
+      .eq('category', 'EMBALAGENS')
       .order('name', { ascending: true });
 
     if (error || !data) {
-      console.warn('Erro ao buscar estoque:', error);
+      console.warn('Erro ao buscar estoque de embalagens:', error);
       return [];
     }
 
@@ -415,10 +502,10 @@ export async function saveInventoryItem(item: InventoryItem): Promise<boolean> {
       .upsert({
         id: item.id,
         name: item.name,
-        category: item.category,
+        category: 'EMBALAGENS',
         quantity: item.quantity,
-        unit: item.unit,
-        min_alert_quantity: item.min_alert_quantity,
+        unit: item.unit || 'un',
+        min_alert_quantity: item.min_alert_quantity || 10,
         cost_price: item.cost_price,
         supplier: item.supplier,
         updated_at: new Date().toISOString()
@@ -483,6 +570,40 @@ export function subscribeToOrder(
       },
       (payload) => {
         onUpdate(parseOrderRow(payload.new));
+      }
+    )
+    .subscribe();
+
+  return () => {
+    if (supabase) {
+      supabase.removeChannel(channel);
+    }
+  };
+}
+
+export function subscribeToInventory(onUpdate: (item: InventoryItem) => void) {
+  if (!isSupabaseConfigured || !supabase) return () => {};
+
+  const channel = supabase
+    .channel('inventory-realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'inventory' },
+      (payload) => {
+        const row = payload.new as any;
+        if (row && row.category === 'EMBALAGENS') {
+          onUpdate({
+            id: row.id,
+            name: row.name,
+            category: row.category,
+            quantity: Number(row.quantity),
+            unit: row.unit,
+            min_alert_quantity: Number(row.min_alert_quantity),
+            cost_price: row.cost_price ? Number(row.cost_price) : 0,
+            supplier: row.supplier,
+            updated_at: row.updated_at
+          });
+        }
       }
     )
     .subscribe();
