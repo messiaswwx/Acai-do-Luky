@@ -2,6 +2,144 @@ import { supabase, isSupabaseConfigured } from '../utils/supabase';
 import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem, CustomerProfile } from '../types';
 
 // ==============================================================================
+// SEGURANÇA: Todas as operações sensíveis passam por funções RPC no banco
+// (SECURITY DEFINER) que validam sessão, entrada e recalculam preços.
+// Nenhuma tabela sensível (pedidos, clientes, estoque) é acessada diretamente.
+// ==============================================================================
+
+const ADMIN_SESSION_KEY = 'luky_admin_session';
+const CUSTOMER_TOKEN_KEY = 'luky_customer_token';
+const POLL_INTERVAL_MS = 20000;
+
+// ------------------------------------------------------------------------------
+// SESSÃO DO ADMINISTRADOR
+// ------------------------------------------------------------------------------
+
+export function getAdminSessionToken(): string {
+  try {
+    return sessionStorage.getItem(ADMIN_SESSION_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setAdminSessionToken(token: string) {
+  try {
+    sessionStorage.setItem(ADMIN_SESSION_KEY, token);
+    // Limpa resquícios do modelo antigo (PIN em texto puro no navegador)
+    sessionStorage.removeItem('luky_admin_pin');
+    sessionStorage.removeItem('luky_admin_unlocked');
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAdminSession() {
+  try {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    sessionStorage.removeItem('luky_admin_pin');
+    sessionStorage.removeItem('luky_admin_unlocked');
+  } catch {
+    // ignore
+  }
+}
+
+/** Dispara quando o banco informa que a sessão do admin expirou. */
+function handleAdminUnauthorized() {
+  clearAdminSession();
+  window.dispatchEvent(new CustomEvent('luky-admin-unauthorized'));
+}
+
+function isUnauthorizedResult(data: unknown, error: { code?: string; message?: string } | null): boolean {
+  if (error && (error.code === '42501' || /unauthorized/i.test(error.message || ''))) return true;
+  return Boolean(data && typeof data === 'object' && (data as any).unauthorized);
+}
+
+export async function checkAdminSession(): Promise<boolean> {
+  const token = getAdminSessionToken();
+  if (!token || !isSupabaseConfigured || !supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc('rpc_admin_check_session', { p_session_token: token });
+    if (error) return false;
+    return data === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function adminLogout(): Promise<void> {
+  const token = getAdminSessionToken();
+  clearAdminSession();
+  if (token && isSupabaseConfigured && supabase) {
+    try {
+      await supabase.rpc('rpc_admin_logout', { p_session_token: token });
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export async function adminLoginRPC(pin: string, deviceToken = '') {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase.rpc('rpc_admin_login', {
+      p_pin: pin.trim(),
+      p_device_token: deviceToken.trim()
+    });
+
+    if (error) {
+      console.warn('Erro ao executar rpc_admin_login:', error.message);
+      return null;
+    }
+    if (data?.success && data.sessionToken) {
+      setAdminSessionToken(data.sessionToken);
+    }
+    return data;
+  } catch (err) {
+    console.error('Exceção ao chamar rpc_admin_login:', err);
+    return null;
+  }
+}
+
+// ------------------------------------------------------------------------------
+// SINAL DE TEMPO REAL (sem dados pessoais) + polling de segurança
+// ------------------------------------------------------------------------------
+
+type SignalField = 'orders_version' | 'inventory_version';
+
+function subscribeToSignal(field: SignalField, onChange: () => void, channelName: string) {
+  const client = supabase;
+  if (!isSupabaseConfigured || !client) return () => {};
+
+  let lastVersion: number | null = null;
+
+  const channel = client
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'realtime_signal' },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const v = Number(row?.[field]);
+        if (lastVersion === null || v !== lastVersion) {
+          lastVersion = v;
+          onChange();
+        }
+      }
+    )
+    .subscribe();
+
+  // Polling de segurança caso o Realtime caia
+  const interval = window.setInterval(onChange, POLL_INTERVAL_MS);
+
+  return () => {
+    window.clearInterval(interval);
+    client.removeChannel(channel);
+  };
+}
+
+// ==============================================================================
 // CONFIGURAÇÕES DA LOJA (STORE SETTINGS)
 // ==============================================================================
 
@@ -11,12 +149,12 @@ export async function fetchStoreSettings(): Promise<StoreSettings | null> {
   try {
     const { data, error } = await supabase
       .from('store_settings')
-      .select('*')
+      .select('store_name, is_open, whatsapp, pix_key, pix_key_type, delivery_fee, estimated_time, address, min_order_value')
       .eq('id', 1)
       .single();
 
     if (error || !data) {
-      console.warn('Erro ao buscar store_settings do Supabase:', error);
+      console.warn('Erro ao buscar store_settings do Supabase:', error?.message);
       return null;
     }
 
@@ -29,10 +167,7 @@ export async function fetchStoreSettings(): Promise<StoreSettings | null> {
       deliveryFee: Number(data.delivery_fee),
       estimatedTime: data.estimated_time,
       address: data.address,
-      minOrderValue: Number(data.min_order_value),
-      adminPin: data.admin_pin,
-      twoFactorEnabled: data.two_factor_enabled,
-      twoFactorBackupCode: data.two_factor_backup_code
+      minOrderValue: Number(data.min_order_value)
     };
   } catch (err) {
     console.error('Exceção ao buscar configurações:', err);
@@ -40,14 +175,14 @@ export async function fetchStoreSettings(): Promise<StoreSettings | null> {
   }
 }
 
-export async function saveStoreSettings(settings: StoreSettings): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false;
+export async function saveStoreSettings(settings: StoreSettings): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) return { success: false, error: 'Banco de dados não configurado.' };
 
-  const pinToUse = sessionStorage.getItem('luky_admin_pin') || settings.adminPin || '1234';
+  const newPin = settings.adminPin && /^\d+$/.test(settings.adminPin) ? settings.adminPin : null;
 
   try {
     const { data, error } = await supabase.rpc('rpc_admin_update_settings', {
-      p_pin: pinToUse,
+      p_session_token: getAdminSessionToken(),
       p_store_name: settings.storeName,
       p_is_open: settings.isOpen,
       p_whatsapp: settings.whatsapp,
@@ -57,42 +192,24 @@ export async function saveStoreSettings(settings: StoreSettings): Promise<boolea
       p_estimated_time: settings.estimatedTime,
       p_address: settings.address,
       p_min_order_value: settings.minOrderValue,
-      p_new_pin: settings.adminPin && settings.adminPin !== 'PROTEGIDO' ? settings.adminPin : null,
-      p_new_backup_code: settings.twoFactorBackupCode && settings.twoFactorBackupCode !== 'PROTEGIDO' ? settings.twoFactorBackupCode : null,
-      p_2fa_enabled: settings.twoFactorEnabled !== false
+      p_new_pin: newPin
     });
 
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
+      return { success: false, error: 'Sessão expirada. Faça login novamente.' };
+    }
     if (error) {
-      console.warn('RPC de atualização retornou erro:', error);
-      // Fallback direto
-      const { error: directError } = await supabase
-        .from('store_settings')
-        .update({
-          store_name: settings.storeName,
-          is_open: settings.isOpen,
-          whatsapp: settings.whatsapp,
-          pix_key: settings.pixKey,
-          pix_key_type: settings.pixKeyType,
-          delivery_fee: settings.deliveryFee,
-          estimated_time: settings.estimatedTime,
-          address: settings.address,
-          min_order_value: settings.minOrderValue,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', 1);
-
-      return !directError;
+      console.warn('RPC de atualização retornou erro:', error.message);
+      return { success: false, error: 'Não foi possível salvar as configurações.' };
     }
-
-    if (data && typeof data === 'object' && 'success' in data && !data.success) {
-      console.warn('RPC negada:', data);
-      return false;
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Alteração negada.' };
     }
-
-    return true;
+    return { success: true };
   } catch (err) {
     console.error('Exceção ao salvar configurações:', err);
-    return false;
+    return { success: false, error: 'Erro de conexão ao salvar configurações.' };
   }
 }
 
@@ -126,38 +243,14 @@ export async function fetchMenuData(): Promise<MenuData | null> {
   if (!isSupabaseConfigured || !supabase) return null;
 
   try {
-    // Busca simultaneamente da tabela principal e da contingência em tempo real
-    const [menuRes, syncRes] = await Promise.all([
-      supabase.from('menu_data').select('data, updated_at').eq('id', 1).maybeSingle(),
-      supabase.from('inventory').select('supplier, updated_at').eq('id', 'sys-menu-sync').maybeSingle()
-    ]);
+    const { data, error } = await supabase
+      .from('menu_data')
+      .select('data')
+      .eq('id', 1)
+      .maybeSingle();
 
-    const menuRow = menuRes.data;
-    const syncRow = syncRes.data;
-
-    const primaryMenu = (menuRow?.data as MenuData) || null;
-    let backupMenu: MenuData | null = null;
-
-    if (syncRow?.supplier) {
-      try {
-        backupMenu = JSON.parse(syncRow.supplier) as MenuData;
-      } catch (e) {
-        console.warn('Erro ao decodificar cardápio de contingência:', e);
-      }
-    }
-
-    if (primaryMenu && backupMenu) {
-      const primaryTime = menuRow?.updated_at ? new Date(menuRow.updated_at).getTime() : 0;
-      const backupTime = syncRow?.updated_at ? new Date(syncRow.updated_at).getTime() : 0;
-
-      // Se o backup de contingência for mais recente que o cardápio principal, usa o backup
-      if (backupTime > primaryTime) {
-        return backupMenu;
-      }
-      return primaryMenu;
-    }
-
-    return backupMenu || primaryMenu;
+    if (error || !data?.data) return null;
+    return data.data as MenuData;
   } catch (err) {
     console.error('Exceção ao buscar menu:', err);
     return null;
@@ -167,62 +260,25 @@ export async function fetchMenuData(): Promise<MenuData | null> {
 export async function saveMenuData(menu: MenuData): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
-  let directSuccess = false;
-  let syncSuccess = false;
-
-  // 1. Tenta atualizar na tabela oficial menu_data
   try {
-    const { data: rpcData, error: rpcError } = await supabase.rpc('rpc_admin_update_menu', {
+    const { data, error } = await supabase.rpc('rpc_admin_update_menu', {
+      p_session_token: getAdminSessionToken(),
       p_menu: menu
     });
 
-    if (!rpcError && rpcData && typeof rpcData === 'object' && ('success' in rpcData) && (rpcData as any).success) {
-      directSuccess = true;
-    } else {
-      const { data, error } = await supabase
-        .from('menu_data')
-        .update({
-          data: menu,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', 1)
-        .select();
-
-      if (!error && data && data.length > 0) {
-        directSuccess = true;
-      }
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
+      return false;
     }
-  } catch (err) {
-    console.warn('Tentativa direta em menu_data falhou:', err);
-  }
-
-  // 2. Grava também no sincronizador de contingência (inventory sys-menu-sync)
-  // Isso garante que descontos e preços funcionem instantaneamente em todos os clientes
-  try {
-    const { error: syncError } = await supabase
-      .from('inventory')
-      .upsert({
-        id: 'sys-menu-sync',
-        name: 'Cardápio em Nuvem',
-        category: '_MENU_CONFIG_',
-        quantity: 1,
-        unit: 'sistema',
-        min_alert_quantity: 0,
-        cost_price: 0,
-        supplier: JSON.stringify(menu),
-        updated_at: new Date().toISOString()
-      });
-
-    if (!syncError) {
-      syncSuccess = true;
-    } else {
-      console.warn('Erro ao sincronizar cardápio de contingência:', syncError);
+    if (error || !data?.success) {
+      console.warn('Falha ao salvar cardápio:', error?.message || data?.error);
+      return false;
     }
+    return true;
   } catch (err) {
-    console.warn('Exceção ao salvar cardápio na contingência:', err);
+    console.warn('Exceção ao salvar cardápio:', err);
+    return false;
   }
-
-  return directSuccess || syncSuccess;
 }
 
 export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
@@ -238,18 +294,6 @@ export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
         fetchMenuData().then(m => {
           if (m) onUpdate(m);
         });
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'inventory' },
-      (payload) => {
-        const row = payload.new as any;
-        if (row && row.id === 'sys-menu-sync') {
-          fetchMenuData().then(m => {
-            if (m) onUpdate(m);
-          });
-        }
       }
     )
     .subscribe();
@@ -271,12 +315,13 @@ export function parseOrderRow(row: any): Order {
   const match = rawNotes.match(/\[(?:RECUSADO|CANCELADO):\s*([^\]]+)\]/i);
   if (match) {
     cancellationReason = match[1].trim();
-    cleanNotes = rawNotes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*/i, '').trim();
+    cleanNotes = rawNotes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*(\|\s*)?/i, '').trim();
   }
 
   return {
     id: row.id,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
     status: row.status as OrderStatus,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
@@ -290,7 +335,7 @@ export function parseOrderRow(row: any): Order {
     } : undefined,
     paymentMethod: row.payment_method,
     paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
-    items: row.items || [],
+    items: Array.isArray(row.items) ? row.items : [],
     subtotal: Number(row.subtotal),
     deliveryFee: Number(row.delivery_fee),
     total: Number(row.total),
@@ -299,20 +344,24 @@ export function parseOrderRow(row: any): Order {
   };
 }
 
+/** Lista de pedidos para o painel (exige sessão de admin). */
 export async function fetchOrders(): Promise<Order[]> {
   if (!isSupabaseConfigured || !supabase) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('rpc_admin_list_orders', {
+      p_session_token: getAdminSessionToken(),
+      p_limit: 500
+    });
 
-    if (error || !data) {
-      console.warn('Erro ao buscar orders do Supabase:', error);
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
       return [];
     }
-
+    if (error || !Array.isArray(data)) {
+      console.warn('Erro ao buscar pedidos:', error?.message);
+      return [];
+    }
     return data.map(parseOrderRow);
   } catch (err) {
     console.error('Exceção ao buscar pedidos:', err);
@@ -320,18 +369,13 @@ export async function fetchOrders(): Promise<Order[]> {
   }
 }
 
+/** Rastreamento público de um pedido pelo seu ID aleatório. */
 export async function fetchOrderById(orderId: string): Promise<Order | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
+  if (!isSupabaseConfigured || !supabase || !orderId) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('id', orderId)
-      .single();
-
+    const { data, error } = await supabase.rpc('rpc_get_order', { p_order_id: orderId });
     if (error || !data) return null;
-
     return parseOrderRow(data);
   } catch (err) {
     console.error('Exceção ao buscar pedido por id:', err);
@@ -339,98 +383,68 @@ export async function fetchOrderById(orderId: string): Promise<Order | null> {
   }
 }
 
-export async function createOrder(order: Partial<Order>): Promise<Order | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
-
-  try {
-    const orderId = order.id || `PED-${Date.now().toString().slice(-6)}`;
-    const row = {
-      id: orderId,
-      status: 'NOVO',
-      customer_name: order.customerName,
-      customer_phone: order.customerPhone,
-      delivery_type: order.orderType,
-      address: order.address?.street,
-      neighborhood: order.address?.neighborhood,
-      number: order.address?.number,
-      complement: order.address?.complement,
-      reference: order.address?.reference,
-      payment_method: order.paymentMethod,
-      change_for: order.paymentDetails?.changeFor,
-      items: order.items || [],
-      subtotal: order.subtotal,
-      delivery_fee: order.deliveryFee,
-      total: order.total,
-      notes: order.notes
-    };
-
-    const { data, error } = await supabase
-      .from('orders')
-      .insert(row)
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error('Erro ao inserir pedido no Supabase:', error);
-      return null;
-    }
-
-    // Sincroniza estoque: deduz 1 unidade de embalagem para cada copo/barca comprado
-    if (order.items && order.items.length > 0) {
-      await adjustPackagingStockForOrder(order.items, 'DECREMENT');
-    }
-
-    return parseOrderRow(data);
-  } catch (err) {
-    console.error('Exceção ao criar pedido:', err);
-    return null;
+/**
+ * Cria o pedido. O banco ignora preços enviados pelo navegador e recalcula
+ * tudo a partir do cardápio oficial. Lança Error com mensagem amigável.
+ */
+export async function createOrder(order: Partial<Order> & { notes?: string }): Promise<Order> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Banco de dados não configurado.');
   }
+
+  const payload = {
+    customerName: order.customerName,
+    customerPhone: order.customerPhone,
+    orderType: order.orderType,
+    address: order.address,
+    paymentMethod: order.paymentMethod,
+    paymentDetails: order.paymentDetails,
+    notes: order.notes,
+    items: (order.items || []).map(item => ({
+      id: item.id,
+      size: { id: item.size?.id },
+      base: { id: item.base?.id },
+      freeToppings: (item.freeToppings || []).map(t => ({ id: t.id })),
+      premiumToppings: (item.premiumToppings || []).map(p => ({ item: { id: p.item?.id }, quantity: p.quantity })),
+      syrups: (item.syrups || []).map(s => ({ id: s.id })),
+      notes: item.notes,
+      quantity: item.quantity
+    }))
+  };
+
+  const { data, error } = await supabase.rpc('rpc_create_order', { p_order: payload });
+
+  if (error) {
+    console.error('Erro ao criar pedido:', error.message);
+    throw new Error('Não foi possível registrar o pedido. Tente novamente.');
+  }
+  if (!data?.success || !data.order) {
+    throw new Error(data?.error || 'Não foi possível registrar o pedido.');
+  }
+  return parseOrderRow(data.order);
 }
 
 export async function updateOrderStatus(
-  orderId: string, 
-  newStatus: OrderStatus, 
+  orderId: string,
+  newStatus: OrderStatus,
   cancellationReason?: string
 ): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const updatePayload: Record<string, any> = {
-      status: newStatus,
-      updated_at: new Date().toISOString()
-    };
+    const { data, error } = await supabase.rpc('rpc_admin_update_order_status', {
+      p_session_token: getAdminSessionToken(),
+      p_order_id: orderId,
+      p_status: newStatus,
+      p_reason: cancellationReason || null
+    });
 
-    if (cancellationReason) {
-      const { data: current } = await supabase
-        .from('orders')
-        .select('notes')
-        .eq('id', orderId)
-        .single();
-
-      const existingNotes = current?.notes ? current.notes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*/i, '').trim() : '';
-      updatePayload.notes = `[RECUSADO: ${cancellationReason.trim()}]${existingNotes ? ` | ${existingNotes}` : ''}`;
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
+      return false;
     }
-
-    if (newStatus === 'CANCELADO') {
-      // Estorna a embalagem que havia sido reservada para o pedido
-      const { data: orderData } = await supabase
-        .from('orders')
-        .select('items')
-        .eq('id', orderId)
-        .single();
-
-      if (orderData?.items && Array.isArray(orderData.items)) {
-        await adjustPackagingStockForOrder(orderData.items, 'RESTORE');
-      }
-    }
-
-    const { error } = await supabase
-      .from('orders')
-      .update(updatePayload)
-      .eq('id', orderId);
-
-    if (error) {
-      console.error('Erro ao atualizar status do pedido:', error);
+    if (error || !data?.success) {
+      console.error('Erro ao atualizar status do pedido:', error?.message || data?.error);
       return false;
     }
     return true;
@@ -442,103 +456,40 @@ export async function updateOrderStatus(
 
 // ==============================================================================
 // CONTROLE DE ESTOQUE (INVENTORY - FOCO EXCLUSIVO EM EMBALAGENS)
+// A baixa/estorno de embalagens agora acontece no banco, junto com o pedido.
 // ==============================================================================
 
-/**
- * Mapeia o item do pedido (tamanho do copo ou barca) para o id da embalagem no estoque.
- */
-export function getPackagingInventoryId(sizeIdOrName: string): string | null {
-  const s = String(sizeIdOrName || '').toLowerCase();
-  if (s.includes('300')) return 'est-copo-300';
-  if (s.includes('500')) return 'est-copo-500';
-  if (s.includes('700')) return 'est-copo-700';
-  if (s.includes('1000') || s.includes('litro') || s.includes('barca')) return 'est-copo-1000';
-  return null;
-}
-
-/**
- * Deduz ou estorna as embalagens no estoque de acordo com os copos comprados no pedido.
- * Exemplo: 1 copo 300ml -> tira 1 unidade do estoque de Copos 300ml.
- */
-export async function adjustPackagingStockForOrder(
-  items: any[],
-  direction: 'DECREMENT' | 'RESTORE' = 'DECREMENT'
-): Promise<void> {
-  if (!isSupabaseConfigured || !supabase || !items || !Array.isArray(items) || items.length === 0) return;
-
-  try {
-    const countsByPackagingId: Record<string, number> = {};
-
-    for (const item of items) {
-      const sizeId = item.size?.id || '';
-      const sizeName = item.size?.name || '';
-      const packagingId = getPackagingInventoryId(sizeId) || getPackagingInventoryId(sizeName);
-
-      if (packagingId) {
-        const qty = Number(item.quantity) || 1;
-        countsByPackagingId[packagingId] = (countsByPackagingId[packagingId] || 0) + qty;
-      }
-    }
-
-    const packagingIds = Object.keys(countsByPackagingId);
-    if (packagingIds.length === 0) return;
-
-    // Busca o estoque atual dessas embalagens
-    const { data: currentRows, error } = await supabase
-      .from('inventory')
-      .select('id, quantity')
-      .in('id', packagingIds);
-
-    if (error || !currentRows) return;
-
-    for (const row of currentRows) {
-      const change = countsByPackagingId[row.id] || 0;
-      if (change === 0) continue;
-
-      const currentQty = Number(row.quantity) || 0;
-      const newQty = direction === 'DECREMENT'
-        ? Math.max(0, currentQty - change)
-        : currentQty + change;
-
-      await supabase
-        .from('inventory')
-        .update({
-          quantity: newQty,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', row.id);
-    }
-  } catch (err) {
-    console.error('Erro ao ajustar estoque de embalagens do pedido:', err);
-  }
+function parseInventoryRow(row: any): InventoryItem {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    quantity: Number(row.quantity),
+    unit: row.unit,
+    min_alert_quantity: Number(row.min_alert_quantity),
+    cost_price: row.cost_price ? Number(row.cost_price) : 0,
+    supplier: row.supplier,
+    updated_at: row.updated_at
+  };
 }
 
 export async function fetchInventory(): Promise<InventoryItem[]> {
   if (!isSupabaseConfigured || !supabase) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('category', 'EMBALAGENS')
-      .order('name', { ascending: true });
+    const { data, error } = await supabase.rpc('rpc_admin_list_inventory', {
+      p_session_token: getAdminSessionToken()
+    });
 
-    if (error || !data) {
-      console.warn('Erro ao buscar estoque de embalagens:', error);
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
       return [];
     }
-
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      category: row.category,
-      quantity: Number(row.quantity),
-      unit: row.unit,
-      min_alert_quantity: Number(row.min_alert_quantity),
-      cost_price: row.cost_price ? Number(row.cost_price) : 0,
-      supplier: row.supplier,
-      updated_at: row.updated_at
-    }));
+    if (error || !Array.isArray(data)) {
+      console.warn('Erro ao buscar estoque de embalagens:', error?.message);
+      return [];
+    }
+    return data.map(parseInventoryRow);
   } catch (err) {
     console.error('Exceção ao buscar estoque:', err);
     return [];
@@ -549,15 +500,16 @@ export async function updateInventoryQuantity(id: string, newQuantity: number): 
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const { error } = await supabase
-      .from('inventory')
-      .update({
-        quantity: Math.max(0, newQuantity),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id);
-
-    return !error;
+    const { data, error } = await supabase.rpc('rpc_admin_set_inventory_quantity', {
+      p_session_token: getAdminSessionToken(),
+      p_id: id,
+      p_quantity: Math.max(0, newQuantity)
+    });
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
+      return false;
+    }
+    return !error && Boolean(data?.success);
   } catch {
     return false;
   }
@@ -567,28 +519,32 @@ export async function saveInventoryItem(item: InventoryItem): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false;
 
   try {
-    const { error } = await supabase
-      .from('inventory')
-      .upsert({
+    const { data, error } = await supabase.rpc('rpc_admin_upsert_inventory_item', {
+      p_session_token: getAdminSessionToken(),
+      p_item: {
         id: item.id,
         name: item.name,
-        category: 'EMBALAGENS',
         quantity: item.quantity,
         unit: item.unit || 'un',
         min_alert_quantity: item.min_alert_quantity || 10,
         cost_price: item.cost_price,
-        supplier: item.supplier,
-        updated_at: new Date().toISOString()
-      });
-
-    return !error;
+        supplier: item.supplier
+      }
+    });
+    if (isUnauthorizedResult(data, error)) {
+      handleAdminUnauthorized();
+      return false;
+    }
+    return !error && Boolean(data?.success);
   } catch {
     return false;
   }
 }
 
 // ==============================================================================
-// REALTIME SUBSCRIPTIONS (TEMPO REAL SEM DEPENDER DE SERVIDOR LIGADO)
+// REALTIME SUBSCRIPTIONS
+// Os dados nunca trafegam pelo canal público: o canal só avisa "mudou" e o
+// painel/cliente busca os dados novamente via RPC autenticada.
 // ==============================================================================
 
 export function subscribeToOrders(
@@ -597,29 +553,34 @@ export function subscribeToOrders(
 ) {
   if (!isSupabaseConfigured || !supabase) return () => {};
 
-  const channel = supabase
-    .channel('orders-realtime')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'orders' },
-      (payload) => {
-        onNewOrder(parseOrderRow(payload.new));
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'orders' },
-      (payload) => {
-        onUpdateOrder(parseOrderRow(payload.new));
-      }
-    )
-    .subscribe();
+  const known = new Map<string, string>();
+  let initialized = false;
+  let running = false;
 
-  return () => {
-    if (supabase) {
-      supabase.removeChannel(channel);
+  const refresh = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const orders = await fetchOrders();
+      for (const order of orders.slice().reverse()) {
+        const fingerprint = `${order.status}|${order.updatedAt || ''}|${order.notes || ''}|${order.cancellationReason || ''}`;
+        const previous = known.get(order.id);
+        if (previous === undefined) {
+          known.set(order.id, fingerprint);
+          if (initialized) onNewOrder(order);
+        } else if (previous !== fingerprint) {
+          known.set(order.id, fingerprint);
+          onUpdateOrder(order);
+        }
+      }
+      initialized = true;
+    } finally {
+      running = false;
     }
   };
+
+  refresh();
+  return subscribeToSignal('orders_version', refresh, 'admin-orders-signal');
 }
 
 export function subscribeToOrder(
@@ -628,432 +589,186 @@ export function subscribeToOrder(
 ) {
   if (!isSupabaseConfigured || !supabase) return () => {};
 
-  const channel = supabase
-    .channel(`order-track-${orderId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'orders',
-        filter: `id=eq.${orderId}`
-      },
-      (payload) => {
-        onUpdate(parseOrderRow(payload.new));
-      }
-    )
-    .subscribe();
-
-  return () => {
-    if (supabase) {
-      supabase.removeChannel(channel);
+  let lastFingerprint = '';
+  const refresh = async () => {
+    const order = await fetchOrderById(orderId);
+    if (!order) return;
+    const fingerprint = `${order.status}|${order.updatedAt || ''}|${order.cancellationReason || ''}`;
+    if (fingerprint !== lastFingerprint) {
+      const isFirst = lastFingerprint === '';
+      lastFingerprint = fingerprint;
+      if (!isFirst) onUpdate(order);
     }
   };
+
+  refresh();
+  return subscribeToSignal('orders_version', refresh, `order-track-${orderId}`);
 }
 
 export function subscribeToInventory(onUpdate: (item: InventoryItem) => void) {
   if (!isSupabaseConfigured || !supabase) return () => {};
 
-  const channel = supabase
-    .channel('inventory-realtime')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'inventory' },
-      (payload) => {
-        const row = payload.new as any;
-        if (row && row.category === 'EMBALAGENS') {
-          onUpdate({
-            id: row.id,
-            name: row.name,
-            category: row.category,
-            quantity: Number(row.quantity),
-            unit: row.unit,
-            min_alert_quantity: Number(row.min_alert_quantity),
-            cost_price: row.cost_price ? Number(row.cost_price) : 0,
-            supplier: row.supplier,
-            updated_at: row.updated_at
-          });
-        }
-      }
-    )
-    .subscribe();
+  const refresh = async () => {
+    const items = await fetchInventory();
+    items.forEach(onUpdate);
+  };
 
-  return () => {
-    if (supabase) {
-      supabase.removeChannel(channel);
-    }
+  return subscribeToSignal('inventory_version', refresh, 'admin-inventory-signal');
+}
+
+// ==============================================================================
+// GESTÃO DE CLIENTES & HISTÓRICO DE COMPRAS
+// Login exige celular + PIN pessoal. O token de sessão fica no navegador e
+// é validado pelo banco a cada consulta.
+// ==============================================================================
+
+function getCustomerToken(): string {
+  try {
+    return localStorage.getItem(CUSTOMER_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setCustomerToken(token: string) {
+  try {
+    localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+    // Remove o cache antigo que guardava dados de clientes no navegador
+    localStorage.removeItem('luky_local_customers');
+  } catch {
+    // ignore
+  }
+}
+
+export function hasCustomerSession(): boolean {
+  return Boolean(getCustomerToken());
+}
+
+function parseCustomer(data: any): CustomerProfile {
+  return {
+    id: data.id,
+    name: data.name,
+    phone: data.phone,
+    address: data.street ? {
+      street: data.street,
+      number: data.number || '',
+      neighborhood: data.neighborhood || '',
+      complement: data.complement || '',
+      reference: data.reference || ''
+    } : undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at
   };
 }
 
-// ==============================================================================
-// AUTENTICAÇÃO E ATUALIZAÇÃO SEGURA VIA RPC (POSTGRESQL SECURITY DEFINER)
-// ==============================================================================
+type CustomerResult = { success: boolean; customer?: CustomerProfile; error?: string; unauthorized?: boolean };
 
-export async function adminLoginRPC(pin: string, deviceToken = '') {
-  if (!isSupabaseConfigured || !supabase) return null;
-
-  try {
-    const { data, error } = await supabase.rpc('rpc_admin_login', {
-      p_pin: pin.trim(),
-      p_device_token: deviceToken.trim()
-    });
-
-    if (error) {
-      console.warn('Erro ao executar rpc_admin_login:', error);
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.error('Exceção ao chamar rpc_admin_login:', err);
-    return null;
+export async function loginCustomer(phone: string, pin: string): Promise<CustomerResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Serviço de contas indisponível no momento.' };
   }
-}
-
-export async function adminVerify2FARPC(challengeToken: string, code: string, deviceName = 'Dispositivo Autorizado') {
-  if (!isSupabaseConfigured || !supabase) return null;
-
   try {
-    const { data, error } = await supabase.rpc('rpc_admin_verify_2fa', {
-      p_challenge_token: challengeToken.trim(),
-      p_code: code.trim(),
-      p_device_name: deviceName
+    const { data, error } = await supabase.rpc('rpc_customer_login', {
+      p_phone: phone.replace(/\D/g, ''),
+      p_pin: pin.trim()
     });
-
-    if (error) {
-      console.warn('Erro ao executar rpc_admin_verify_2fa:', error);
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.error('Exceção ao chamar rpc_admin_verify_2fa:', err);
-    return null;
-  }
-}
-
-export async function adminUpdateSettingsRPC(pin: string, settings: StoreSettings) {
-  if (!isSupabaseConfigured || !supabase) return false;
-
-  try {
-    const { data, error } = await supabase.rpc('rpc_admin_update_settings', {
-      p_pin: pin.trim(),
-      p_store_name: settings.storeName,
-      p_is_open: settings.isOpen,
-      p_whatsapp: settings.whatsapp,
-      p_pix_key: settings.pixKey,
-      p_pix_key_type: settings.pixKeyType,
-      p_delivery_fee: settings.deliveryFee,
-      p_estimated_time: settings.estimatedTime,
-      p_address: settings.address,
-      p_min_order_value: settings.minOrderValue,
-      p_new_pin: settings.adminPin && settings.adminPin !== 'PROTEGIDO' ? settings.adminPin : null,
-      p_new_backup_code: settings.twoFactorBackupCode && settings.twoFactorBackupCode !== 'PROTEGIDO' ? settings.twoFactorBackupCode : null,
-      p_2fa_enabled: settings.twoFactorEnabled
-    });
-
-    if (error || !data?.success) {
-      console.warn('Erro ao atualizar configurações via RPC segura:', error || data?.error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('Exceção ao chamar rpc_admin_update_settings:', err);
-    return false;
-  }
-}
-
-// ==============================================================================
-// GESTÃO DE CLIENTES & HISTÓRICO DE COMPRAS (CUSTOMERS & ORDERS)
-// ==============================================================================
-
-const LOCAL_CUSTOMERS_KEY = 'luky_local_customers';
-
-function getLocalCustomers(): CustomerProfile[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_CUSTOMERS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (error) return { success: false, error: 'Erro ao consultar cadastro. Tente novamente.' };
+    if (!data?.success) return { success: false, error: data?.error || 'Celular ou PIN incorretos.' };
+    setCustomerToken(data.token);
+    return { success: true, customer: parseCustomer(data.customer) };
   } catch {
-    return [];
-  }
-}
-
-function saveLocalCustomers(customers: CustomerProfile[]) {
-  try {
-    localStorage.setItem(LOCAL_CUSTOMERS_KEY, JSON.stringify(customers));
-  } catch (err) {
-    console.warn('Erro ao salvar clientes locais:', err);
+    return { success: false, error: 'Erro ao consultar cadastro. Tente novamente.' };
   }
 }
 
 /**
- * Busca cliente cadastrado pelo número de celular.
+ * Cadastra um novo cliente (o banco garante que não haja números duplicados).
  */
-export async function findCustomerByPhone(phone: string): Promise<CustomerProfile | null> {
-  const cleanPhone = phone.replace(/\D/g, '');
-  if (!cleanPhone) return null;
-
-  // 1. Tenta buscar no Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('phone', cleanPhone)
-        .maybeSingle();
-
-      if (!error && data) {
-        return {
-          id: data.id,
-          name: data.name,
-          phone: data.phone,
-          address: data.street ? {
-            street: data.street,
-            number: data.number || '',
-            neighborhood: data.neighborhood || '',
-            complement: data.complement || '',
-            reference: data.reference || ''
-          } : undefined,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
-      }
-    } catch {
-      // Tabela pode ainda não ter sido criada no Supabase
-    }
-  }
-
-  // 2. Fallback no cache local
-  const localList = getLocalCustomers();
-  const found = localList.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
-  return found || null;
-}
-
-/**
- * Verifica se já existe um cadastro com este número de celular.
- */
-export async function checkCustomerPhoneExists(phone: string, excludeId?: string): Promise<boolean> {
-  const cleanPhone = phone.replace(/\D/g, '');
-  if (!cleanPhone) return false;
-
-  // 1. Tenta no Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase
-        .from('customers')
-        .select('id')
-        .eq('phone', cleanPhone);
-
-      if (excludeId) {
-        query = query.neq('id', excludeId);
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return true;
-      }
-    } catch {
-      // Ignora erro se tabela não existir
-    }
-  }
-
-  // 2. Fallback no cache local
-  const localList = getLocalCustomers();
-  return localList.some(c => c.phone.replace(/\D/g, '') === cleanPhone && (!excludeId || c.id !== excludeId));
-}
-
-/**
- * Cadastra um novo cliente (garante que não haja números duplicados).
- */
-export async function createCustomer(profile: CustomerProfile): Promise<{ success: boolean; customer?: CustomerProfile; error?: string }> {
+export async function createCustomer(profile: CustomerProfile, pin: string): Promise<CustomerResult> {
   const cleanPhone = profile.phone.replace(/\D/g, '');
   if (!cleanPhone || cleanPhone.length < 10) {
     return { success: false, error: 'Por favor, informe um número de celular válido com DDD (mínimo 10 dígitos).' };
   }
-
   if (!profile.name.trim()) {
     return { success: false, error: 'Por favor, informe seu nome completo.' };
   }
-
-  // Validação: não pode ter número repetido no banco
-  const phoneExists = await checkCustomerPhoneExists(cleanPhone);
-  if (phoneExists) {
-    return { 
-      success: false, 
-      error: 'Este número de celular já possui uma conta cadastrada! Por favor, acerte o número ou faça login na aba "Entrar".' 
-    };
+  if (!/^\d{4,8}$/.test(pin.trim())) {
+    return { success: false, error: 'Crie um PIN de 4 a 8 números para proteger sua conta.' };
   }
-
-  const newId = 'cli_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-  const now = new Date().toISOString();
-
-  const customerObj: CustomerProfile = {
-    ...profile,
-    id: newId,
-    phone: cleanPhone,
-    name: profile.name.trim(),
-    createdAt: now,
-    updatedAt: now
-  };
-
-  // 1. Tenta salvar no Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .insert({
-          id: newId,
-          name: profile.name.trim(),
-          phone: cleanPhone,
-          street: profile.address?.street || '',
-          number: profile.address?.number || '',
-          neighborhood: profile.address?.neighborhood || '',
-          complement: profile.address?.complement || '',
-          reference: profile.address?.reference || '',
-          created_at: now,
-          updated_at: now
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
-          return { 
-            success: false, 
-            error: 'Este número de celular já possui uma conta cadastrada! Por favor, acerte o número ou faça login na aba "Entrar".' 
-          };
-        }
-        console.warn('Erro ao inserir cliente no Supabase (usando fallback local):', error);
-      } else if (data) {
-        customerObj.id = data.id;
-      }
-    } catch (err: any) {
-      console.warn('Exceção ao inserir cliente no Supabase:', err);
-    }
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Serviço de contas indisponível no momento.' };
   }
-
-  // 2. Sempre persiste também no cache local
-  const localList = getLocalCustomers();
-  localList.push(customerObj);
-  saveLocalCustomers(localList);
-
-  return { success: true, customer: customerObj };
-}
-
-/**
- * Atualiza o perfil do cliente (nome, endereço ou celular com checagem de duplicação).
- */
-export async function updateCustomer(id: string, updates: Partial<CustomerProfile>): Promise<{ success: boolean; customer?: CustomerProfile; error?: string }> {
-  if (updates.phone) {
-    const cleanPhone = updates.phone.replace(/\D/g, '');
-    const exists = await checkCustomerPhoneExists(cleanPhone, id);
-    if (exists) {
-      return { 
-        success: false, 
-        error: 'Este número de celular já pertence a outro usuário cadastrado!' 
-      };
-    }
-  }
-
-  const now = new Date().toISOString();
-
-  // 1. Tenta atualizar no Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const updatePayload: any = {
-        updated_at: now
-      };
-      if (updates.name !== undefined) updatePayload.name = updates.name.trim();
-      if (updates.phone !== undefined) updatePayload.phone = updates.phone.replace(/\D/g, '');
-      if (updates.address) {
-        if (updates.address.street !== undefined) updatePayload.street = updates.address.street;
-        if (updates.address.number !== undefined) updatePayload.number = updates.address.number;
-        if (updates.address.neighborhood !== undefined) updatePayload.neighborhood = updates.address.neighborhood;
-        if (updates.address.complement !== undefined) updatePayload.complement = updates.address.complement;
-        if (updates.address.reference !== undefined) updatePayload.reference = updates.address.reference;
-      }
-
-      const { data, error } = await supabase
-        .from('customers')
-        .update(updatePayload)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === '23505' || error.message.includes('unique')) {
-          return { 
-            success: false, 
-            error: 'Este número de celular já pertence a outro usuário cadastrado!' 
-          };
-        }
-        console.warn('Erro ao atualizar cliente no Supabase:', error);
-      } else if (data) {
-        const updated: CustomerProfile = {
-          id: data.id,
-          name: data.name,
-          phone: data.phone,
-          address: data.street ? {
-            street: data.street,
-            number: data.number || '',
-            neighborhood: data.neighborhood || '',
-            complement: data.complement || '',
-            reference: data.reference || ''
-          } : undefined,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
-        // Atualiza cache local
-        const localList = getLocalCustomers().map(c => c.id === id ? updated : c);
-        saveLocalCustomers(localList);
-        return { success: true, customer: updated };
-      }
-    } catch (err: any) {
-      console.warn('Exceção ao atualizar no Supabase:', err);
-    }
-  }
-
-  // 2. Atualiza no cache local
-  const localList = getLocalCustomers();
-  let updatedObj: CustomerProfile | null = null;
-  const nextList = localList.map(c => {
-    if (c.id === id) {
-      updatedObj = {
-        ...c,
-        ...updates,
-        phone: updates.phone ? updates.phone.replace(/\D/g, '') : c.phone,
-        updatedAt: now
-      };
-      return updatedObj;
-    }
-    return c;
-  });
-
-  saveLocalCustomers(nextList);
-  return { success: true, customer: updatedObj || undefined };
-}
-
-/**
- * Busca histórico completo de compras de um cliente pelo seu número de celular.
- */
-export async function fetchCustomerOrders(phone: string): Promise<Order[]> {
-  if (!isSupabaseConfigured || !supabase) return [];
-  const cleanPhone = phone.replace(/\D/g, '');
-  if (!cleanPhone) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('rpc_customer_register', {
+      p_name: profile.name.trim(),
+      p_phone: cleanPhone,
+      p_pin: pin.trim(),
+      p_address: profile.address || null
+    });
+    if (error) return { success: false, error: 'Erro ao salvar cadastro. Tente novamente.' };
+    if (!data?.success) return { success: false, error: data?.error || 'Não foi possível cadastrar.' };
+    setCustomerToken(data.token);
+    return { success: true, customer: parseCustomer(data.customer) };
+  } catch {
+    return { success: false, error: 'Erro ao salvar cadastro. Verifique a conexão.' };
+  }
+}
 
-    if (error || !data) return [];
+/**
+ * Atualiza o perfil do cliente logado (nome, endereço ou celular).
+ */
+export async function updateCustomer(_id: string, updates: Partial<CustomerProfile>): Promise<CustomerResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Serviço de contas indisponível no momento.' };
+  }
+  try {
+    const { data, error } = await supabase.rpc('rpc_customer_update', {
+      p_token: getCustomerToken(),
+      p_profile: {
+        name: updates.name,
+        phone: updates.phone,
+        address: updates.address || null
+      }
+    });
+    if (error) return { success: false, error: 'Erro ao atualizar perfil.' };
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Erro ao salvar alterações.', unauthorized: Boolean(data?.unauthorized) };
+    }
+    return { success: true, customer: parseCustomer(data.customer) };
+  } catch {
+    return { success: false, error: 'Erro ao atualizar perfil.' };
+  }
+}
 
-    // Filtra pelo telefone com comparação robusta
-    return data
-      .filter((row: any) => {
-        const rowPhone = String(row.customer_phone || '').replace(/\D/g, '');
-        return rowPhone === cleanPhone || (cleanPhone.length >= 8 && rowPhone.endsWith(cleanPhone.slice(-8)));
-      })
-      .map(parseOrderRow);
+export async function logoutCustomer(): Promise<void> {
+  const token = getCustomerToken();
+  try {
+    localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+  if (token && isSupabaseConfigured && supabase) {
+    try {
+      await supabase.rpc('rpc_customer_logout', { p_token: token });
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Busca o histórico de compras do cliente logado (validado pelo token no banco).
+ */
+export async function fetchCustomerOrders(_phone?: string): Promise<Order[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const token = getCustomerToken();
+  if (!token) return [];
+
+  try {
+    const { data, error } = await supabase.rpc('rpc_customer_orders', { p_token: token });
+    if (error || !Array.isArray(data)) return [];
+    return data.map(parseOrderRow);
   } catch (err) {
     console.error('Erro ao buscar histórico de pedidos do cliente:', err);
     return [];
@@ -1064,21 +779,5 @@ export async function fetchCustomerOrders(phone: string): Promise<Order[]> {
  * Observa em tempo real alterações nos pedidos do cliente logado.
  */
 export function subscribeToCustomerOrders(onUpdate: () => void) {
-  const client = supabase;
-  if (!isSupabaseConfigured || !client) return () => {};
-
-  const channel = client
-    .channel('customer_orders_realtime_feed')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'orders' },
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    client.removeChannel(channel);
-  };
+  return subscribeToSignal('orders_version', onUpdate, 'customer-orders-signal');
 }

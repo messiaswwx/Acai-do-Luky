@@ -51,7 +51,7 @@ import { ThemeToggle } from './ThemeToggle';
 interface AdminPanelProps {
   settings: StoreSettings;
   menu: MenuData;
-  onUpdateSettings: (newSettings: StoreSettings) => Promise<void>;
+  onUpdateSettings: (newSettings: StoreSettings) => Promise<{ success: boolean; error?: string } | void>;
   onUpdateMenu: (newMenu: MenuData) => Promise<boolean | void>;
   onLogout?: () => void;
   isDark?: boolean;
@@ -399,8 +399,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
     setSavingSettings(true);
-    await onUpdateSettings(localSettings);
+    const res = await onUpdateSettings(localSettings);
     setSavingSettings(false);
+    if (res && typeof res === 'object' && !res.success) {
+      alert(res.error || 'Erro ao salvar configurações.');
+    } else {
+      alert('Configurações salvas com sucesso!');
+      if (localSettings.adminPin) {
+        setLocalSettings(prev => ({ ...prev, adminPin: '' }));
+      }
+    }
   };
 
   const handleQuickToggleStoreOpen = async () => {

@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomerProfile, Order, CartItem } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
 import { 
-  findCustomerByPhone, 
+  loginCustomer, 
   createCustomer, 
   updateCustomer, 
   fetchCustomerOrders, 
-  subscribeToCustomerOrders 
+  subscribeToCustomerOrders,
+  logoutCustomer 
 } from '../services/supabaseService';
 import { 
   User, 
@@ -22,7 +23,8 @@ import {
   Edit3, 
   Save, 
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  KeyRound
 } from 'lucide-react';
 
 interface CustomerDrawerProps {
@@ -52,6 +54,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
   // Login form state
   const [loginPhone, setLoginPhone] = useState('');
+  const [loginPin, setLoginPin] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -59,6 +62,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
   const [registerForm, setRegisterForm] = useState({
     name: '',
     phone: '',
+    pin: '',
     street: '',
     number: '',
     neighborhood: '',
@@ -144,16 +148,22 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
       return;
     }
 
+    if (!loginPin || loginPin.length < 4) {
+      setLoginError('Por favor, digite seu PIN de no mínimo 4 números.');
+      return;
+    }
+
     setLoginLoading(true);
     try {
-      const found = await findCustomerByPhone(clean);
-      if (found) {
-        localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(found));
-        onCustomerChange(found);
+      const res = await loginCustomer(clean, loginPin);
+      if (res.success && res.customer) {
+        localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(res.customer));
+        onCustomerChange(res.customer);
         setActiveTab('ORDERS');
         setLoginPhone('');
+        setLoginPin('');
       } else {
-        setLoginError('Nenhum cadastro encontrado com este celular. Crie sua conta grátis na aba "Cadastrar"!');
+        setLoginError(res.error || 'Celular ou PIN incorretos.');
       }
     } catch {
       setLoginError('Erro ao consultar cadastro. Tente novamente.');
@@ -178,6 +188,11 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
       return;
     }
 
+    if (!registerForm.pin || registerForm.pin.length < 4) {
+      setRegisterError('Crie um PIN numérico de no mínimo 4 dígitos para proteger sua conta.');
+      return;
+    }
+
     setRegisterLoading(true);
     try {
       const res = await createCustomer({
@@ -190,7 +205,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
           complement: registerForm.complement.trim() || undefined,
           reference: registerForm.reference.trim() || undefined
         } : undefined
-      });
+      }, registerForm.pin);
 
       if (!res.success || !res.customer) {
         setRegisterError(res.error || 'Não foi possível cadastrar. Tente novamente.');
@@ -204,6 +219,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
       setRegisterForm({
         name: '',
         phone: '',
+        pin: '',
         street: '',
         number: '',
         neighborhood: '',
@@ -266,6 +282,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
   // Logout handler
   const handleLogout = () => {
+    logoutCustomer();
     localStorage.removeItem(CUSTOMER_SESSION_KEY);
     onCustomerChange(null);
     setAuthMode('LOGIN');
@@ -378,9 +395,28 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Seu PIN de Acesso (4 a 8 números)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        placeholder="••••"
+                        maxLength={8}
+                        required
+                        value={loginPin}
+                        onChange={e => setLoginPin(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-base font-bold py-3 pl-10 pr-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-purple-700 dark:focus:border-purple-500 focus:outline-hidden transition-colors font-mono tracking-widest"
+                      />
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    </div>
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={loginLoading || loginPhone.replace(/\D/g, '').length < 10}
+                    disabled={loginLoading || loginPhone.replace(/\D/g, '').length < 10 || loginPin.length < 4}
                     className="w-full bg-gradient-to-r from-purple-800 via-purple-900 to-indigo-950 hover:from-purple-900 hover:to-indigo-900 text-white font-black py-3.5 px-4 rounded-2xl shadow-xl shadow-purple-950/20 active:scale-98 transition-all text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {loginLoading ? (
@@ -460,6 +496,28 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                     </span>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Crie um PIN de Acesso (4 a 8 números) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        placeholder="Ex: 1234"
+                        maxLength={8}
+                        required
+                        value={registerForm.pin}
+                        onChange={e => setRegisterForm({ ...registerForm, pin: e.target.value.replace(/\D/g, '') })}
+                        className="w-full text-sm font-bold p-3 pl-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-purple-700 font-mono tracking-widest"
+                      />
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                      Código numérico pessoal para proteger seus pedidos e seus dados.
+                    </span>
+                  </div>
+
                   {/* Endereço Padrão (Opcional no cadastro) */}
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
                     <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
@@ -516,7 +574,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
                   <button
                     type="submit"
-                    disabled={registerLoading || !registerForm.name.trim() || registerForm.phone.replace(/\D/g, '').length < 10}
+                    disabled={registerLoading || !registerForm.name.trim() || registerForm.phone.replace(/\D/g, '').length < 10 || registerForm.pin.length < 4}
                     className="w-full bg-gradient-to-r from-purple-800 via-purple-900 to-indigo-950 hover:from-purple-900 hover:to-indigo-900 text-white font-black py-3.5 px-4 rounded-2xl shadow-xl shadow-purple-950/20 active:scale-98 transition-all text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {registerLoading ? (

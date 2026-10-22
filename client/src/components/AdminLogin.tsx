@@ -93,7 +93,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         if (res.status === 429) {
           const lockedData = await res.json();
           setLockoutSeconds(lockedData.lockoutSeconds || 60);
-          setErrorMsg('Muitas tentativas incorretas. Bloqueado temporariamente por segurança.');
+          setErrorMsg(lockedData.error || 'Muitas tentativas incorretas. Bloqueado temporariamente por segurança.');
           setAttemptsLeft(0);
           return;
         }
@@ -101,15 +101,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
         data = await res.json();
       }
 
+      if (data && data.locked) {
+        setLockoutSeconds(data.lockoutSeconds || 60);
+        setErrorMsg(data.error || 'Muitas tentativas incorretas. Bloqueado temporariamente por segurança.');
+        setAttemptsLeft(0);
+        return;
+      }
+
       if (data && data.success) {
-        // PIN correto! Acesso liberado diretamente
+        // PIN correto! Acesso liberado
         if (data.deviceToken) {
           localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
-        } else {
-          localStorage.setItem(DEVICE_TOKEN_KEY, `dev_${Date.now()}`);
         }
         sessionStorage.setItem('luky_admin_unlocked', 'true');
-        sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
         return;
       }
@@ -118,10 +122,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
       setErrorMsg(data?.error || 'PIN incorreto. Verifique a senha e tente novamente.');
       setPin('');
     } catch {
-      // Fallback offline
+      // Fallback offline caso o servidor esteja inacessível
       if (pin.trim() === (expectedPin || '1234').trim()) {
         sessionStorage.setItem('luky_admin_unlocked', 'true');
-        sessionStorage.setItem('luky_admin_pin', pin.trim());
         onLoginSuccess();
       } else {
         setErrorMsg('PIN incorreto. Tente novamente.');

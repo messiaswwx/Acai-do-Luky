@@ -138,6 +138,21 @@ let db = loadDatabase();
 // Controle de tentativas de login, bloqueio temporário (Lockout) e 2FA
 const loginAttempts = new Map(); // identifier -> { count: number, lockUntil: number }
 const twoFactorChallenges = new Map(); // challengeToken -> { code: string, createdAt: number, expiresAt: number, attempts: number }
+const adminSessions = new Map(); // sessionToken -> { createdAt: number, expiresAt: number }
+
+function requireAdminAuth(req, res, next) {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || req.headers['x-admin-session'] || req.query.sessionToken;
+  if (!token || !adminSessions.has(token)) {
+    return res.status(401).json({ error: 'Acesso não autorizado. Sessão administrativa inválida ou expirada.', unauthorized: true });
+  }
+  const session = adminSessions.get(token);
+  if (Date.now() > session.expiresAt) {
+    adminSessions.delete(token);
+    return res.status(401).json({ error: 'Sessão administrativa expirada. Faça login novamente.', unauthorized: true });
+  }
+  next();
+}
 
 function getClientIdentifier(req) {
   return req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'client-default';
@@ -255,11 +270,17 @@ app.post('/api/auth/login', (req, res) => {
         saveDatabase(db);
       }
       clearFailedAttempts(clientId);
+      const sessionToken = `adm_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+      adminSessions.set(sessionToken, {
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 12 * 60 * 60 * 1000
+      });
       return res.json({
         success: true,
         require2FA: false,
         deviceTrusted: true,
-        deviceToken
+        deviceToken,
+        sessionToken
       });
     }
 
@@ -292,10 +313,16 @@ app.post('/api/auth/login', (req, res) => {
 
   // Se o 2FA estiver desligado nas configurações, autoriza direto
   clearFailedAttempts(clientId);
+  const sessionToken = `adm_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+  adminSessions.set(sessionToken, {
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 12 * 60 * 60 * 1000
+  });
   res.json({
     success: true,
     require2FA: false,
-    deviceTrusted: false
+    deviceTrusted: false,
+    sessionToken
   });
 });
 
@@ -348,10 +375,17 @@ app.post('/api/auth/verify-2fa', (req, res) => {
     });
     saveDatabase(db);
 
+    const sessionToken = `adm_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+    adminSessions.set(sessionToken, {
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 12 * 60 * 60 * 1000
+    });
+
     return res.json({ 
       success: true,
       deviceToken: newDeviceToken,
-      deviceTrusted: true
+      deviceTrusted: true,
+      sessionToken
     });
   }
 
@@ -425,21 +459,34 @@ app.post('/api/auth/resend-2fa', (req, res) => {
 
 // Endpoints
 app.get('/api/settings', (req, res) => {
-  res.json(db.settings);
+  // Oculta chaves sensíveis e segredos
+  const safeSettings = { ...db.settings };
+  delete safeSettings.adminPin;
+  delete safeSettings.twoFactorBackupCode;
+  res.json(safeSettings);
 });
 
-app.put('/api/settings', (req, res) => {
-  db.settings = { ...db.settings, ...req.body };
+app.put('/api/settings', requireAdminAuth, (req, res) => {
+  const updates = { ...req.body };
+  // Não permite sobrescrever adminPin com valor em branco
+  if (!updates.adminPin || updates.adminPin === 'PROTEGIDO') {
+    delete updates.adminPin;
+  }
+  db.settings = { ...db.settings, ...updates };
   saveDatabase(db);
-  io.emit('settings_updated', db.settings);
-  res.json(db.settings);
+
+  const safeSettings = { ...db.settings };
+  delete safeSettings.adminPin;
+  delete safeSettings.twoFactorBackupCode;
+  io.emit('settings_updated', safeSettings);
+  res.json(safeSettings);
 });
 
 app.get('/api/menu', (req, res) => {
   res.json(db.menu);
 });
 
-app.put('/api/menu', (req, res) => {
+app.put('/api/menu', requireAdminAuth, (req, res) => {
   db.menu = req.body;
   saveDatabase(db);
   io.emit('menu_updated', db.menu);
@@ -474,11 +521,11 @@ function adjustPackagingStock(items, direction) {
   io.emit('inventory_updated', db.inventory);
 }
 
-app.get('/api/inventory', (req, res) => {
+app.get('/api/inventory', requireAdminAuth, (req, res) => {
   res.json(db.inventory || []);
 });
 
-app.patch('/api/inventory/:id', (req, res) => {
+app.patch('/api/inventory/:id', requireAdminAuth, (req, res) => {
   const { quantity } = req.body;
   if (!Array.isArray(db.inventory)) db.inventory = [];
   const item = db.inventory.find(i => i.id === req.params.id);
@@ -490,7 +537,7 @@ app.patch('/api/inventory/:id', (req, res) => {
   res.json(item);
 });
 
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', requireAdminAuth, (req, res) => {
   res.json(db.orders);
 });
 
@@ -501,11 +548,56 @@ app.get('/api/orders/:id', (req, res) => {
 });
 
 app.post('/api/orders', (req, res) => {
+  const body = req.body || {};
+
+  if (!db.settings?.isOpen) {
+    return res.status(400).json({ error: 'A loja está fechada no momento.' });
+  }
+
+  // Recalcula o subtotal oficial a partir do cardápio cadastrado
+  let subtotalCalculado = 0;
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+
+  for (const it of rawItems) {
+    const size = db.menu?.sizes?.find(s => s.id === it.size?.id);
+    if (!size) continue;
+    const isPromo = size.discountPercent > 0 && (!size.discountExpiresAt || new Date(size.discountExpiresAt) > new Date());
+    let unit = isPromo ? size.price : (size.originalPrice || size.price);
+
+    if (Array.isArray(it.premiumToppings)) {
+      for (const pt of it.premiumToppings) {
+        const prem = db.menu?.premiumToppings?.find(p => p.id === pt.item?.id);
+        if (prem) {
+          unit += (prem.price || 0) * (Number(pt.quantity) || 1);
+        }
+      }
+    }
+
+    it.unitPrice = Number(unit.toFixed(2));
+    const qty = Math.max(1, Math.min(50, Number(it.quantity) || 1));
+    it.quantity = qty;
+    subtotalCalculado += it.unitPrice * qty;
+  }
+
+  const deliveryFee = body.orderType === 'ENTREGA' ? (Number(db.settings.deliveryFee) || 0) : 0;
+  const total = Number((subtotalCalculado + deliveryFee).toFixed(2));
+
+  const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();
   const newOrder = {
-    id: `PED-${Date.now().toString().slice(-6)}`,
+    id: `PED-${randomHex}`,
     createdAt: new Date().toISOString(),
     status: 'NOVO', // NOVO, PREPARANDO, A_CAMINHO, CONCLUIDO, CANCELADO
-    ...req.body
+    customerName: String(body.customerName || '').slice(0, 80),
+    customerPhone: String(body.customerPhone || '').replace(/\D/g, '').slice(0, 13),
+    orderType: body.orderType === 'RETIRADA' ? 'RETIRADA' : 'ENTREGA',
+    address: body.address,
+    paymentMethod: body.paymentMethod,
+    paymentDetails: body.paymentDetails,
+    items: rawItems,
+    subtotal: Number(subtotalCalculado.toFixed(2)),
+    deliveryFee,
+    total,
+    notes: String(body.notes || '').slice(0, 300)
   };
 
   db.orders.unshift(newOrder);
@@ -523,7 +615,7 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json(newOrder);
 });
 
-app.patch('/api/orders/:id/status', (req, res) => {
+app.patch('/api/orders/:id/status', requireAdminAuth, (req, res) => {
   const { status, notes } = req.body;
   const orderIndex = db.orders.findIndex(o => o.id === req.params.id);
 
@@ -545,6 +637,16 @@ app.patch('/api/orders/:id/status', (req, res) => {
   if (previousStatus !== 'CANCELADO' && status === 'CANCELADO' && Array.isArray(db.orders[orderIndex].items)) {
     adjustPackagingStock(db.orders[orderIndex].items, 'RESTORE');
   }
+
+  db.orders[orderIndex].updatedAt = new Date().toISOString();
+  saveDatabase(db);
+
+  const updatedOrder = db.orders[orderIndex];
+  io.emit('order_status_updated', updatedOrder);
+  io.to(`order_${updatedOrder.id}`).emit('my_order_update', updatedOrder);
+
+  res.json(updatedOrder);
+});
 
   db.orders[orderIndex].updatedAt = new Date().toISOString();
   saveDatabase(db);

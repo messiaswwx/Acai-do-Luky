@@ -22,7 +22,8 @@ import {
   subscribeToStoreSettings,
   subscribeToMenuData,
   fetchOrderById,
-  subscribeToOrder
+  subscribeToOrder,
+  adminLogout
 } from './services/supabaseService';
 import { playCancellationAlert } from './utils/audio';
 import { 
@@ -291,12 +292,16 @@ export default function App() {
     };
   }, []);
 
-  const handleUpdateSettings = async (newSettings: StoreSettings) => {
+  const handleUpdateSettings = async (newSettings: StoreSettings): Promise<{ success: boolean; error?: string }> => {
+    let result = { success: true };
+    if (isSupabaseConfigured) {
+      result = await saveStoreSettings(newSettings);
+      if (!result.success) {
+        return result;
+      }
+    }
     setSettings(newSettings);
     localStorage.setItem(CACHED_SETTINGS_KEY, JSON.stringify(newSettings));
-    if (isSupabaseConfigured) {
-      await saveStoreSettings(newSettings);
-    }
     try {
       await fetch('/api/settings', {
         method: 'PUT',
@@ -306,6 +311,7 @@ export default function App() {
     } catch {
       // Servidor local offline, Supabase já persistiu
     }
+    return result;
   };
 
   const handleUpdateMenu = async (newMenu: MenuData): Promise<boolean> => {
@@ -381,7 +387,17 @@ export default function App() {
     setCartItems([]);
   }, []);
 
-  const handleAdminLogout = useCallback(() => {
+  // Observa expiração de sessão do admin
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAdminAuthenticated(false);
+    };
+    window.addEventListener('luky-admin-unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('luky-admin-unauthorized', handleUnauthorized);
+  }, []);
+
+  const handleAdminLogout = useCallback(async () => {
+    await adminLogout();
     sessionStorage.removeItem('luky_admin_unlocked');
     setIsAdminAuthenticated(false);
   }, []);
