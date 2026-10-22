@@ -11,6 +11,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { CustomerDrawer } from './components/CustomerDrawer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLogin } from './components/AdminLogin';
 import { isSupabaseConfigured } from './utils/supabase';
@@ -421,7 +422,8 @@ export default function App() {
   };
 
   return (
-    <BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
       <Routes>
         {/* ========================================================= */}
         {/* ROTA 1: CARDÁPIO PÚBLICO DO CLIENTE (/)                   */}
@@ -893,12 +895,29 @@ export default function App() {
               )}
 
               {activeOrder && isTrackingModalOpen && (
-                <OrderTrackingModal
-                  order={activeOrder}
-                  settings={settings}
-                  onClose={handleCloseTracking}
-                  onNewOrder={handleNewOrder}
-                />
+                <ErrorBoundary
+                  fallback={
+                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-sm w-full text-center space-y-4">
+                        <p className="font-black text-sm text-slate-800 dark:text-white">Não foi possível carregar os detalhes do pedido no momento.</p>
+                        <button
+                          type="button"
+                          onClick={() => setIsTrackingModalOpen(false)}
+                          className="w-full py-2.5 bg-purple-900 hover:bg-purple-950 text-white rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    </div>
+                  }
+                >
+                  <OrderTrackingModal
+                    order={activeOrder}
+                    settings={settings}
+                    onClose={handleCloseTracking}
+                    onNewOrder={handleNewOrder}
+                  />
+                </ErrorBoundary>
               )}
 
               <CustomerDrawer
@@ -948,5 +967,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+  </ErrorBoundary>
   );
 }

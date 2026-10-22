@@ -1,0 +1,4 @@
+fazer uma parte de estoque pra facilitar a visualização do estoque que ele tem e ter controle sobre isso
+
+
+- Integrar API de pagamento (Mercado Pago / Pix) com reembolso e estorno automático em caso de cancelamento (detalhado no arquivo INTEGRACAO_PAGAMENTO_E_REEMBOLSO.md)
