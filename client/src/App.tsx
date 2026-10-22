@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import type { SizeItem, CartItem, Order, MenuData, StoreSettings } from './types';
+import type { SizeItem, CartItem, Order, MenuData, StoreSettings, CustomerProfile } from './types';
 import { formatCurrency } from './utils/format';
 import { isDiscountActive, getRemainingHoursText } from './utils/promo';
 import { getSocket } from './utils/socket';
@@ -10,6 +10,7 @@ import { MonteAcaiModal } from './components/MonteAcaiModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
+import { CustomerDrawer } from './components/CustomerDrawer';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLogin } from './components/AdminLogin';
 import { isSupabaseConfigured } from './utils/supabase';
@@ -37,7 +38,8 @@ import {
   Star, 
   Flame, 
   ShoppingBag,
-  XCircle
+  XCircle,
+  User
 } from 'lucide-react';
 
 const INITIAL_SETTINGS: StoreSettings = {
@@ -137,6 +139,18 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+  const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('luky_active_customer');
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(false);
 
   // Fetch settings & menu from Supabase (ou fallback para backend local)
   const fetchData = async () => {
@@ -336,6 +350,17 @@ export default function App() {
     setCartItems(prev => prev.filter(i => i.id !== itemId));
   }, []);
 
+  const handleReorder = useCallback((items: CartItem[]) => {
+    setCartItems(prev => [...prev, ...items]);
+    setIsCartOpen(true);
+  }, []);
+
+  const handleTrackCustomerOrder = useCallback((order: Order) => {
+    setActiveOrder(order);
+    localStorage.setItem('luky_active_order_id', order.id);
+    setIsTrackingModalOpen(true);
+  }, []);
+
   const handleOrderSuccess = useCallback((order: Order) => {
     setCartItems([]);
     setIsCheckoutOpen(false);
@@ -432,6 +457,27 @@ export default function App() {
                         )}
                       </button>
                     )}
+
+                    {/* Botão de Conta / Perfil do Cliente */}
+                    <button
+                      onClick={() => setIsCustomerDrawerOpen(true)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        customer
+                          ? 'bg-purple-900/90 hover:bg-purple-800 text-white border border-purple-700/60 shadow-xs'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                      title={customer ? `Conectado como ${customer.name}` : 'Acessar minha conta'}
+                    >
+                      <User className="w-3.5 h-3.5 text-amber-300" />
+                      {customer ? (
+                        <span className="max-w-[100px] truncate">{customer.name.split(' ')[0]}</span>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Minha Conta</span>
+                          <span className="sm:hidden">Entrar</span>
+                        </>
+                      )}
+                    </button>
 
                     <button
                       onClick={() => setIsCartOpen(true)}
@@ -826,6 +872,7 @@ export default function App() {
                     setIsCartOpen(true);
                   }}
                   onOrderSuccess={handleOrderSuccess}
+                  customer={customer}
                 />
               )}
 
@@ -837,6 +884,15 @@ export default function App() {
                   onNewOrder={handleNewOrder}
                 />
               )}
+
+              <CustomerDrawer
+                isOpen={isCustomerDrawerOpen}
+                onClose={() => setIsCustomerDrawerOpen(false)}
+                customer={customer}
+                onCustomerChange={setCustomer}
+                onReorder={handleReorder}
+                onTrackOrder={handleTrackCustomerOrder}
+              />
             </div>
           }
         />

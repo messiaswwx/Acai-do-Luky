@@ -138,18 +138,34 @@ CREATE TABLE IF NOT EXISTS public.trusted_devices (
   last_used_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. HABILITAR ROW LEVEL SECURITY (RLS) COM POLÍTICAS PÚBLICAS PERMISSIVAS
+-- 6. TABELA DE CLIENTES (CUSTOMERS - LOGIN POR CELULAR E HISTÓRICO)
+CREATE TABLE IF NOT EXISTS public.customers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT UNIQUE NOT NULL,
+  street TEXT,
+  number TEXT,
+  neighborhood TEXT,
+  complement TEXT,
+  reference TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. HABILITAR ROW LEVEL SECURITY (RLS) COM POLÍTICAS PÚBLICAS PERMISSIVAS
 ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trusted_devices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Acesso público às configurações" ON public.store_settings FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso público ao cardápio" ON public.menu_data FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso público aos pedidos" ON public.orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso público ao estoque" ON public.inventory FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso público aos dispositivos" ON public.trusted_devices FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso público aos clientes" ON public.customers FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. HABILITAR TEMPO REAL (REALTIME) DO SUPABASE PARA PEDIDOS E LOJA
 DO $$

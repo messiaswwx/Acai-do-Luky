@@ -115,3 +115,18 @@ export interface InventoryItem {
   supplier?: string;
   updated_at?: string;
 }
+
+export interface CustomerProfile {
+  id?: string;
+  name: string;
+  phone: string;
+  address?: {
+    street: string;
+    number: string;
+    neighborhood: string;
+    complement?: string;
+    reference?: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}

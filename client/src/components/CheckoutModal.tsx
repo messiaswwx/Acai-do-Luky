@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { CartItem, StoreSettings, PaymentMethod, Order } from '../types';
+import type { CartItem, StoreSettings, PaymentMethod, Order, CustomerProfile } from '../types';
 import { formatCurrency } from '../utils/format';
 import { X, Bike, Store, QrCode, CreditCard, Banknote, Copy, Check, ArrowLeft, Send } from 'lucide-react';
 import { isSupabaseConfigured } from '../utils/supabase';
@@ -12,6 +12,7 @@ interface CheckoutModalProps {
   onClose: () => void;
   onBackToCart: () => void;
   onOrderSuccess: (order: Order) => void;
+  customer?: CustomerProfile | null;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -19,18 +20,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   settings,
   onClose,
   onBackToCart,
-  onOrderSuccess
+  onOrderSuccess,
+  customer
 }) => {
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState(() => customer?.name || '');
+  const [customerPhone, setCustomerPhone] = useState(() => customer?.phone || '');
   const [orderType, setOrderType] = useState<'ENTREGA' | 'RETIRADA'>('ENTREGA');
 
   // Address
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
-  const [neighborhood, setNeighborhood] = useState('');
-  const [complement, setComplement] = useState('');
-  const [reference, setReference] = useState('');
+  const [street, setStreet] = useState(() => customer?.address?.street || '');
+  const [number, setNumber] = useState(() => customer?.address?.number || '');
+  const [neighborhood, setNeighborhood] = useState(() => customer?.address?.neighborhood || '');
+  const [complement, setComplement] = useState(() => customer?.address?.complement || '');
+  const [reference, setReference] = useState(() => customer?.address?.reference || '');
 
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');

@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../utils/supabase';
-import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem } from '../types';
+import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem, CustomerProfile } from '../types';
 
 // ==============================================================================
 // CONFIGURAÇÕES DA LOJA (STORE SETTINGS)
@@ -759,4 +759,326 @@ export async function adminUpdateSettingsRPC(pin: string, settings: StoreSetting
     console.error('Exceção ao chamar rpc_admin_update_settings:', err);
     return false;
   }
+}
+
+// ==============================================================================
+// GESTÃO DE CLIENTES & HISTÓRICO DE COMPRAS (CUSTOMERS & ORDERS)
+// ==============================================================================
+
+const LOCAL_CUSTOMERS_KEY = 'luky_local_customers';
+
+function getLocalCustomers(): CustomerProfile[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_CUSTOMERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalCustomers(customers: CustomerProfile[]) {
+  try {
+    localStorage.setItem(LOCAL_CUSTOMERS_KEY, JSON.stringify(customers));
+  } catch (err) {
+    console.warn('Erro ao salvar clientes locais:', err);
+  }
+}
+
+/**
+ * Busca cliente cadastrado pelo número de celular.
+ */
+export async function findCustomerByPhone(phone: string): Promise<CustomerProfile | null> {
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (!cleanPhone) return null;
+
+  // 1. Tenta buscar no Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.name,
+          phone: data.phone,
+          address: data.street ? {
+            street: data.street,
+            number: data.number || '',
+            neighborhood: data.neighborhood || '',
+            complement: data.complement || '',
+            reference: data.reference || ''
+          } : undefined,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        };
+      }
+    } catch {
+      // Tabela pode ainda não ter sido criada no Supabase
+    }
+  }
+
+  // 2. Fallback no cache local
+  const localList = getLocalCustomers();
+  const found = localList.find(c => c.phone.replace(/\D/g, '') === cleanPhone);
+  return found || null;
+}
+
+/**
+ * Verifica se já existe um cadastro com este número de celular.
+ */
+export async function checkCustomerPhoneExists(phone: string, excludeId?: string): Promise<boolean> {
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (!cleanPhone) return false;
+
+  // 1. Tenta no Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let query = supabase
+        .from('customers')
+        .select('id')
+        .eq('phone', cleanPhone);
+
+      if (excludeId) {
+        query = query.neq('id', excludeId);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        return true;
+      }
+    } catch {
+      // Ignora erro se tabela não existir
+    }
+  }
+
+  // 2. Fallback no cache local
+  const localList = getLocalCustomers();
+  return localList.some(c => c.phone.replace(/\D/g, '') === cleanPhone && (!excludeId || c.id !== excludeId));
+}
+
+/**
+ * Cadastra um novo cliente (garante que não haja números duplicados).
+ */
+export async function createCustomer(profile: CustomerProfile): Promise<{ success: boolean; customer?: CustomerProfile; error?: string }> {
+  const cleanPhone = profile.phone.replace(/\D/g, '');
+  if (!cleanPhone || cleanPhone.length < 10) {
+    return { success: false, error: 'Por favor, informe um número de celular válido com DDD (mínimo 10 dígitos).' };
+  }
+
+  if (!profile.name.trim()) {
+    return { success: false, error: 'Por favor, informe seu nome completo.' };
+  }
+
+  // Validação: não pode ter número repetido no banco
+  const phoneExists = await checkCustomerPhoneExists(cleanPhone);
+  if (phoneExists) {
+    return { 
+      success: false, 
+      error: 'Este número de celular já possui uma conta cadastrada! Por favor, acerte o número ou faça login na aba "Entrar".' 
+    };
+  }
+
+  const newId = 'cli_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  const now = new Date().toISOString();
+
+  const customerObj: CustomerProfile = {
+    ...profile,
+    id: newId,
+    phone: cleanPhone,
+    name: profile.name.trim(),
+    createdAt: now,
+    updatedAt: now
+  };
+
+  // 1. Tenta salvar no Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({
+          id: newId,
+          name: profile.name.trim(),
+          phone: cleanPhone,
+          street: profile.address?.street || '',
+          number: profile.address?.number || '',
+          neighborhood: profile.address?.neighborhood || '',
+          complement: profile.address?.complement || '',
+          reference: profile.address?.reference || '',
+          created_at: now,
+          updated_at: now
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate')) {
+          return { 
+            success: false, 
+            error: 'Este número de celular já possui uma conta cadastrada! Por favor, acerte o número ou faça login na aba "Entrar".' 
+          };
+        }
+        console.warn('Erro ao inserir cliente no Supabase (usando fallback local):', error);
+      } else if (data) {
+        customerObj.id = data.id;
+      }
+    } catch (err: any) {
+      console.warn('Exceção ao inserir cliente no Supabase:', err);
+    }
+  }
+
+  // 2. Sempre persiste também no cache local
+  const localList = getLocalCustomers();
+  localList.push(customerObj);
+  saveLocalCustomers(localList);
+
+  return { success: true, customer: customerObj };
+}
+
+/**
+ * Atualiza o perfil do cliente (nome, endereço ou celular com checagem de duplicação).
+ */
+export async function updateCustomer(id: string, updates: Partial<CustomerProfile>): Promise<{ success: boolean; customer?: CustomerProfile; error?: string }> {
+  if (updates.phone) {
+    const cleanPhone = updates.phone.replace(/\D/g, '');
+    const exists = await checkCustomerPhoneExists(cleanPhone, id);
+    if (exists) {
+      return { 
+        success: false, 
+        error: 'Este número de celular já pertence a outro usuário cadastrado!' 
+      };
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  // 1. Tenta atualizar no Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const updatePayload: any = {
+        updated_at: now
+      };
+      if (updates.name !== undefined) updatePayload.name = updates.name.trim();
+      if (updates.phone !== undefined) updatePayload.phone = updates.phone.replace(/\D/g, '');
+      if (updates.address) {
+        if (updates.address.street !== undefined) updatePayload.street = updates.address.street;
+        if (updates.address.number !== undefined) updatePayload.number = updates.address.number;
+        if (updates.address.neighborhood !== undefined) updatePayload.neighborhood = updates.address.neighborhood;
+        if (updates.address.complement !== undefined) updatePayload.complement = updates.address.complement;
+        if (updates.address.reference !== undefined) updatePayload.reference = updates.address.reference;
+      }
+
+      const { data, error } = await supabase
+        .from('customers')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505' || error.message.includes('unique')) {
+          return { 
+            success: false, 
+            error: 'Este número de celular já pertence a outro usuário cadastrado!' 
+          };
+        }
+        console.warn('Erro ao atualizar cliente no Supabase:', error);
+      } else if (data) {
+        const updated: CustomerProfile = {
+          id: data.id,
+          name: data.name,
+          phone: data.phone,
+          address: data.street ? {
+            street: data.street,
+            number: data.number || '',
+            neighborhood: data.neighborhood || '',
+            complement: data.complement || '',
+            reference: data.reference || ''
+          } : undefined,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        };
+        // Atualiza cache local
+        const localList = getLocalCustomers().map(c => c.id === id ? updated : c);
+        saveLocalCustomers(localList);
+        return { success: true, customer: updated };
+      }
+    } catch (err: any) {
+      console.warn('Exceção ao atualizar no Supabase:', err);
+    }
+  }
+
+  // 2. Atualiza no cache local
+  const localList = getLocalCustomers();
+  let updatedObj: CustomerProfile | null = null;
+  const nextList = localList.map(c => {
+    if (c.id === id) {
+      updatedObj = {
+        ...c,
+        ...updates,
+        phone: updates.phone ? updates.phone.replace(/\D/g, '') : c.phone,
+        updatedAt: now
+      };
+      return updatedObj;
+    }
+    return c;
+  });
+
+  saveLocalCustomers(nextList);
+  return { success: true, customer: updatedObj || undefined };
+}
+
+/**
+ * Busca histórico completo de compras de um cliente pelo seu número de celular.
+ */
+export async function fetchCustomerOrders(phone: string): Promise<Order[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (!cleanPhone) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    // Filtra pelo telefone com comparação robusta
+    return data
+      .filter((row: any) => {
+        const rowPhone = String(row.customer_phone || '').replace(/\D/g, '');
+        return rowPhone === cleanPhone || (cleanPhone.length >= 8 && rowPhone.endsWith(cleanPhone.slice(-8)));
+      })
+      .map(parseOrderRow);
+  } catch (err) {
+    console.error('Erro ao buscar histórico de pedidos do cliente:', err);
+    return [];
+  }
+}
+
+/**
+ * Observa em tempo real alterações nos pedidos do cliente logado.
+ */
+export function subscribeToCustomerOrders(onUpdate: () => void) {
+  const client = supabase;
+  if (!isSupabaseConfigured || !client) return () => {};
+
+  const channel = client
+    .channel('customer_orders_realtime_feed')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'orders' },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
 }
