@@ -1633,12 +1633,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             </div>
 
-            {/* SEGURANÇA E 2FA */}
-            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-4">
+            {/* SEGURANÇA DO PAINEL */}
+            <div className="bg-purple-50 dark:bg-purple-950/40 p-4 rounded-2xl border border-purple-200 dark:border-purple-900/60 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-base">🔐</span>
-                <h3 className="text-xs font-black text-purple-950 uppercase tracking-wider">
-                  Segurança & Verificação em Duas Etapas (2FA)
+                <h3 className="text-xs font-black text-purple-950 dark:text-purple-300 uppercase tracking-wider">
+                  Segurança do Painel Administrativo
                 </h3>
               </div>
 
@@ -1652,76 +1652,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   value={localSettings.adminPin ?? ''}
                   onChange={e => setLocalSettings({ ...localSettings, adminPin: e.target.value.replace(/\D/g, '') })}
                   placeholder="Ex: 1234"
-                  className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-                <span className="text-[10px] text-purple-700 dark:text-purple-400 block mt-1">
-                  Exigido na primeira etapa de login do /admin.
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-purple-200 dark:border-purple-800">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white block">Exigir 2FA (Verificação em 2 Etapas)</span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Gera um código de 6 dígitos no WhatsApp além do PIN
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLocalSettings({ ...localSettings, twoFactorEnabled: !localSettings.twoFactorEnabled })}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                    localSettings.twoFactorEnabled !== false ? 'bg-purple-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  {localSettings.twoFactorEnabled !== false ? 'Ativado' : 'Desativado'}
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Chave Mestra de Backup 2FA (Emergência)
-                </label>
-                <input
-                  type="text"
-                  maxLength={10}
-                  value={localSettings.twoFactorBackupCode ?? ''}
-                  onChange={e => setLocalSettings({ ...localSettings, twoFactorBackupCode: e.target.value.replace(/\D/g, '') })}
-                  placeholder="Ex: 998877"
                   className="w-full text-sm font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
                 />
                 <span className="text-[10px] text-purple-700 dark:text-purple-400 block mt-1">
-                  Código fixo de emergência caso você não tenha acesso ao WhatsApp no momento.
+                  Código numérico exclusivo exigido para desbloquear e gerenciar o painel /admin.
                 </span>
-              </div>
-
-              {/* Status do Dispositivo Confiável */}
-              <div className="pt-2 border-t border-purple-200/60 flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <span className="text-xs font-bold text-slate-800 block">Autorização deste Aparelho</span>
-                  <span className="text-[11px] text-slate-500">
-                    {localStorage.getItem('luky_device_token')
-                      ? 'Este aparelho já está verificado com 2FA (pede apenas o PIN ao entrar).'
-                      : 'Este aparelho ainda precisará validar o 2FA no próximo acesso.'}
-                  </span>
-                </div>
-                {localStorage.getItem('luky_device_token') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const token = localStorage.getItem('luky_device_token');
-                      fetch('/api/auth/revoke-device', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deviceToken: token })
-                      }).catch(() => {});
-                      localStorage.removeItem('luky_device_token');
-                      alert('Autorização deste aparelho removida. No próximo login, o 2FA será solicitado novamente.');
-                    }}
-                    className="text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Exigir 2FA novamente neste aparelho
-                  </button>
-                )}
               </div>
             </div>
 
