@@ -191,7 +191,17 @@ export default function App() {
 
   // Customer State
   const [selectedSizeToBuild, setSelectedSizeToBuild] = useState<SizeItem | null>(null);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('luky_cart_items');
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
@@ -310,6 +320,19 @@ export default function App() {
     };
   }, [activeOrder?.id, activeOrder?.status]);
 
+  // Persiste itens não confirmados da sacola para não perder ao atualizar a página
+  useEffect(() => {
+    try {
+      if (cartItems.length > 0) {
+        localStorage.setItem('luky_cart_items', JSON.stringify(cartItems));
+      } else {
+        localStorage.removeItem('luky_cart_items');
+      }
+    } catch {
+      // ignore
+    }
+  }, [cartItems]);
+
   useEffect(() => {
     fetchData();
 
@@ -425,6 +448,11 @@ export default function App() {
 
   const handleOrderSuccess = useCallback((order: Order) => {
     setCartItems([]);
+    try {
+      localStorage.removeItem('luky_cart_items');
+    } catch {
+      // ignore
+    }
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setActiveOrder(order);
@@ -437,7 +465,12 @@ export default function App() {
   }, []);
 
   const handleNewOrder = useCallback(() => {
-    localStorage.removeItem('luky_active_order_id');
+    try {
+      localStorage.removeItem('luky_active_order_id');
+      localStorage.removeItem('luky_cart_items');
+    } catch {
+      // ignore
+    }
     setActiveOrder(null);
     setIsTrackingModalOpen(false);
     setCartItems([]);
@@ -703,7 +736,7 @@ export default function App() {
                         <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
                         <div>
                           <span className="text-[10px] text-purple-300 block font-semibold">Entrega & Retirada</span>
-                          <strong className="text-white text-xs">Taxa: {formatCurrency(settings.deliveryFee)}</strong>
+                          <strong className="text-white text-xs">Praia Grande</strong>
                         </div>
                       </div>
 
@@ -711,7 +744,7 @@ export default function App() {
                         <Heart className="w-4 h-4 text-pink-400 shrink-0" />
                         <div>
                           <span className="text-[10px] text-purple-300 block font-semibold">Pagamento Fácil</span>
-                          <strong className="text-white text-xs">Pix, Cartão ou Dinheiro</strong>
+                          <strong className="text-white text-xs">Pix e Cartões Online</strong>
                         </div>
                       </div>
                     </div>
