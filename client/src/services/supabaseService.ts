@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../utils/supabase';
-import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem, CustomerProfile } from '../types';
+import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem, CustomerProfile, PaymentMethod } from '../types';
 
 // ==============================================================================
 // SEGURANÇA: Todas as operações sensíveis passam por funções RPC no banco
@@ -411,15 +411,20 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
       fruits: (item.fruits || []).map(f => ({ id: f.id })),
       premiumToppings: (item.premiumToppings || []).map(p => ({ item: { id: p.item?.id }, quantity: p.quantity })),
       syrups: (item.syrups || []).map(s => ({ id: s.id })),
-      notes: [
-        item.fruits && item.fruits.length > 0 ? `[Frutas: ${item.fruits.map(f => f.name).join(', ')}]` : '',
-        item.notes || ''
-      ].filter(Boolean).join(' - '),
+      notes: (item.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim(),
       quantity: item.quantity
     }))
   };
 
-  const { data, error } = await supabase.rpc('rpc_create_order', { p_order: payload });
+  let { data, error } = await supabase.rpc('rpc_create_order', { p_order: payload });
+
+  // Fallback seguro caso o banco ainda não tenha a constraint atualizada para CARTAO_ONLINE
+  if (error && error.message?.includes('Forma de pagamento inválida') && payload.paymentMethod === 'CARTAO_ONLINE') {
+    payload.paymentMethod = 'CARTAO_ENTREGA' as PaymentMethod;
+    const retry = await supabase.rpc('rpc_create_order', { p_order: payload });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     console.error('Erro ao criar pedido:', error.message);

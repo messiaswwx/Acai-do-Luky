@@ -819,7 +819,7 @@ BEGIN
   IF v_type NOT IN ('ENTREGA','RETIRADA') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Tipo de pedido inválido.');
   END IF;
-  IF v_payment NOT IN ('PIX','CARTAO_ENTREGA','DINHEIRO') THEN
+  IF v_payment NOT IN ('PIX','CARTAO_ONLINE','MERCADO_PAGO_PIX','MERCADO_PAGO_CARTAO','CARTAO_ENTREGA','DINHEIRO') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Forma de pagamento inválida.');
   END IF;
 

@@ -23,7 +23,7 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
   try {
     const lines: string[] = [];
 
-    lines.push(`💜 *PEDIDO ${order?.id || '---'} - AÇAÍ DO KAYKY* 💜`);
+    lines.push(`💜 *PEDIDO ${order?.id || '---'} - AÇAÍ DO LUKY* 💜`);
     lines.push(`📅 *Horário:* ${formatDateTime(order?.createdAt)}`);
     lines.push(`👤 *Cliente:* ${order?.customerName || 'Cliente'}`);
     lines.push(`📱 *Telefone:* ${order?.customerPhone || ''}`);
@@ -77,8 +77,9 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
         }).filter(Boolean).join(', ')}`);
       }
       
-      if (item?.notes) {
-        lines.push(`• *Obs:* ${item.notes}`);
+      const cleanItemNotes = (item?.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim();
+      if (cleanItemNotes) {
+        lines.push(`• *Obs:* ${cleanItemNotes}`);
       }
     });
 
@@ -92,13 +93,13 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
     
     let paymentText = '';
     if (order?.paymentMethod === 'PIX') {
-      paymentText = 'PIX (Chave enviada)';
+      paymentText = '⚡ Pix Online (Mercado Pago)';
+    } else if (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') {
+      paymentText = `💳 Cartão Online (${order?.paymentDetails?.cardType || 'Crédito'} - Mercado Pago)`;
     } else if (order?.paymentMethod === 'CARTAO_ENTREGA') {
-      paymentText = `Cartão na entrega (${order?.paymentDetails?.cardType || 'Débito/Crédito'})`;
+      paymentText = `Cartão (${order?.paymentDetails?.cardType || 'Débito/Crédito'})`;
     } else {
-      paymentText = order?.paymentDetails?.needChange 
-        ? `Dinheiro (Troco para ${formatCurrency(order?.paymentDetails?.changeFor || 0)})`
-        : 'Dinheiro (Sem troco)';
+      paymentText = 'Dinheiro';
     }
     lines.push(`💳 *Forma de Pagamento:* ${paymentText}`);
 

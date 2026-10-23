@@ -371,7 +371,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
           {!isCancelled && order?.paymentMethod === 'PIX' && (
             <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                <span>Chave Pix da Loja:</span>
+                <span>Chave Pix Instantânea:</span>
                 <span className="font-black text-emerald-800 dark:text-emerald-300">Total: {formatCurrency(order?.total || 0)}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -390,6 +390,19 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   <span>{copiedPix ? 'Copiado' : 'Copiar'}</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Cartão Online Reminder if chosen and not cancelled */}
+          {!isCancelled && (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') && (
+            <div className="p-4 bg-purple-50 dark:bg-purple-950/40 rounded-2xl border border-purple-200 dark:border-purple-800 space-y-1">
+              <div className="flex items-center justify-between text-xs font-bold text-purple-950 dark:text-purple-200">
+                <span>Pagamento Online:</span>
+                <span className="font-black text-purple-900 dark:text-amber-300">Mercado Pago</span>
+              </div>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                💳 Cartão {order?.paymentDetails?.cardType === 'DEBITO' ? 'de Débito' : 'de Crédito'} • Total: {formatCurrency(order?.total || 0)}
+              </p>
             </div>
           )}
 
@@ -458,9 +471,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                           }).filter(Boolean).join(', ')}
                         </p>
                       )}
-                      {item?.notes && (
-                        <p className="text-slate-400 italic text-[10px]">Obs: {item.notes}</p>
-                      )}
+                      {(() => {
+                        const cleanItemNotes = (item?.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim();
+                        return cleanItemNotes ? (
+                          <p className="text-slate-400 italic text-[10px]">Obs: {cleanItemNotes}</p>
+                        ) : null;
+                      })()}
                     </div>
                   );
                 })

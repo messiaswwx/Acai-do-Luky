@@ -96,7 +96,10 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
                 {item.premiumToppings.length > 0 && (
                   <p>• Extras: {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}</p>
                 )}
-                {item.notes && <p className="font-bold italic">Obs: {item.notes}</p>}
+                {(() => {
+                  const cleanItemNotes = (item.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim();
+                  return cleanItemNotes ? <p className="font-bold italic">Obs: {cleanItemNotes}</p> : null;
+                })()}
               </div>
             ))}
           </div>
@@ -123,12 +126,12 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
             <p>
               <span className="font-bold">PAGAMENTO:</span>{' '}
               {order.paymentMethod === 'PIX'
-                ? 'PIX'
+                ? 'PIX ONLINE (MERCADO PAGO)'
+                : (order.paymentMethod === 'CARTAO_ONLINE' || order.paymentDetails?.gateway === 'MERCADO_PAGO')
+                ? `CARTÃO ONLINE (${order.paymentDetails?.cardType || 'CRÉDITO'} - MERCADO PAGO)`
                 : order.paymentMethod === 'CARTAO_ENTREGA'
                 ? `CARTÃO (${order.paymentDetails?.cardType || 'MÁQUINA'})`
-                : order.paymentDetails?.needChange
-                ? `DINHEIRO (Troco p/ ${formatCurrency(order.paymentDetails.changeFor || 0)})`
-                : 'DINHEIRO (Sem Troco)'}
+                : 'DINHEIRO'}
             </p>
           </div>
 

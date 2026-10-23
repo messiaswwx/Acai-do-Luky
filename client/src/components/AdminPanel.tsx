@@ -786,11 +786,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <span className="font-semibold">Extras:</span> {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}
                               </p>
                             )}
-                            {item.notes && (
-                              <p className="italic text-purple-950 dark:text-amber-200 font-bold bg-amber-100/70 dark:bg-amber-950/60 border border-transparent dark:border-amber-800 p-1 rounded mt-1">
-                                Obs: {item.notes}
-                              </p>
-                            )}
+                            {(() => {
+                              const cleanItemNotes = (item.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim();
+                              return cleanItemNotes ? (
+                                <p className="italic text-purple-950 dark:text-amber-200 font-bold bg-amber-100/70 dark:bg-amber-950/60 border border-transparent dark:border-amber-800 p-1 rounded mt-1">
+                                  Obs: {cleanItemNotes}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                         );
                       })}
@@ -804,12 +807,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between">
                         <span>Pagamento:</span>
                         <span className="font-bold text-slate-700 dark:text-slate-300">
-                          {order.paymentMethod === 'PIX' && 'Pix'}
-                          {order.paymentMethod === 'CARTAO_ENTREGA' && `Cartão (${order.paymentDetails?.cardType || 'Débito/Crédito'})`}
+                          {order.paymentMethod === 'PIX' && '⚡ Pix Online (Mercado Pago)'}
+                          {(order.paymentMethod === 'CARTAO_ONLINE' || order.paymentDetails?.gateway === 'MERCADO_PAGO') && (
+                            `💳 Cartão Online (${order.paymentDetails?.cardType || 'Crédito'} - Mercado Pago)`
+                          )}
+                          {order.paymentMethod === 'CARTAO_ENTREGA' && !order.paymentDetails?.gateway && (
+                            `Cartão (${order.paymentDetails?.cardType || 'Débito/Crédito'})`
+                          )}
                           {order.paymentMethod === 'DINHEIRO' && (
                             order.paymentDetails?.needChange 
                               ? `Dinheiro (Troco p/ ${formatCurrency(order.paymentDetails.changeFor || 0)})`
-                              : 'Dinheiro (Sem troco)'
+                              : 'Dinheiro'
                           )}
                         </span>
                       </div>

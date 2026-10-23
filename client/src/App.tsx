@@ -116,7 +116,7 @@ const INITIAL_MENU: MenuData = {
     { id: "base-tradicional", name: "Açaí Tradicional Cremoso", available: true },
     { id: "base-banana", name: "Açaí Batido com Banana", available: true },
     { id: "base-cupuacu", name: "Cupuaçu Puro Cremoso", available: true },
-    { id: "base-misto", name: "Meio a Meio (Açaí + Cupuaçu)", available: true }
+    { id: "base-misto", name: "Casadinho (Açaí e Cupuaçu)", available: true }
   ],
   syrups: [
     { id: "syrup-condensado", name: "Leite Condensado", available: true },
