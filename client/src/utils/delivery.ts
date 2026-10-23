@@ -18,7 +18,7 @@ export const PRAIA_GRANDE_NEIGHBORHOODS: DeliveryNeighborhood[] = [
   { name: 'Vila Antártica', fee: 8.00 }
 ];
 
-export function getDeliveryFeeByNeighborhood(neighborhoodName: string, fallbackFee: number = 5.00): number {
+export function getDeliveryFeeByNeighborhood(neighborhoodName: string, fallbackFee: number = 10.00): number {
   if (!neighborhoodName) return fallbackFee;
   const clean = neighborhoodName
     .toLowerCase()
@@ -39,5 +39,6 @@ export function getDeliveryFeeByNeighborhood(neighborhoodName: string, fallbackF
   if (clean.includes('aviacao')) return 8.00;
   if (clean.includes('antartica')) return 8.00;
 
-  return fallbackFee;
+  // "quando ela selecionar outros coloque o valor padrão de 10 reais"
+  return 10.00;
 }

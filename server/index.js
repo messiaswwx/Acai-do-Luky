@@ -493,7 +493,7 @@ app.put('/api/menu', requireAdminAuth, (req, res) => {
   res.json(db.menu);
 });
 
-function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 5.00) {
+function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 10.00) {
   if (!neighborhoodName) return fallbackFee;
   const clean = String(neighborhoodName)
     .toLowerCase()
@@ -514,7 +514,7 @@ function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 5.00) {
   if (clean.includes('aviacao')) return 8.00;
   if (clean.includes('antartica')) return 8.00;
 
-  return fallbackFee;
+  return 10.00;
 }
 
 function getPackagingInventoryId(sizeIdOrName) {

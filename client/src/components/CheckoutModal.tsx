@@ -34,12 +34,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [neighborhood, setNeighborhood] = useState(() => customer?.address?.neighborhood || '');
   const [complement, setComplement] = useState(() => customer?.address?.complement || '');
   const [reference, setReference] = useState(() => customer?.address?.reference || '');
-  const [isCustomNeighborhood, setIsCustomNeighborhood] = useState(() => {
-    if (!customer?.address?.neighborhood) return false;
-    return !PRAIA_GRANDE_NEIGHBORHOODS.some(
-      n => n.name.toLowerCase() === (customer.address?.neighborhood || '').trim().toLowerCase()
-    );
-  });
 
   // Payment: 100% Online (Mercado Pago: Pix e Cartões)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
@@ -55,8 +49,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   );
   const deliveryFee = useMemo(() => {
     if (orderType !== 'ENTREGA') return 0;
-    return getDeliveryFeeByNeighborhood(neighborhood, settings.deliveryFee);
-  }, [orderType, neighborhood, settings.deliveryFee]);
+    if (!neighborhood) return 0;
+    return getDeliveryFeeByNeighborhood(neighborhood, 10.00);
+  }, [orderType, neighborhood]);
   const total = subtotal + deliveryFee;
 
   const copyPixKey = () => {
@@ -181,7 +176,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         </div>
 
         {/* Content Form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-5 space-y-6">
+        <form id="checkout-form" onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-5">
           {errorMsg && (
             <div className="p-3 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-xl font-bold">
               {errorMsg}
@@ -231,35 +226,37 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 Como Deseja Receber?
               </h3>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setOrderType('ENTREGA')}
-                className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border-2 font-bold text-xs flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer h-[76px] ${
                   orderType === 'ENTREGA'
                     ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-xs'
                     : 'border-slate-200 dark:border-slate-800 hover:border-purple-200 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/60'
                 }`}
               >
-                <Bike className="w-5 h-5 text-purple-700 dark:text-purple-400" />
-                <span>Receber em Casa</span>
-                <span className="text-[11px] font-black text-amber-600 dark:text-amber-400">
-                  {neighborhood ? `Taxa: ${formatCurrency(deliveryFee)}` : 'A partir de R$ 4,00'}
+                <Bike className="w-5 h-5 text-purple-700 dark:text-purple-400 shrink-0" />
+                <span className="leading-tight">Receber em Casa</span>
+                <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 leading-tight">
+                  {neighborhood ? `Taxa: ${formatCurrency(deliveryFee)}` : 'Entrega rápida'}
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setOrderType('RETIRADA')}
-                className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border-2 font-bold text-xs flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer h-[76px] ${
                   orderType === 'RETIRADA'
                     ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-xs'
                     : 'border-slate-200 dark:border-slate-800 hover:border-purple-200 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/60'
                 }`}
               >
-                <Store className="w-5 h-5 text-purple-700 dark:text-purple-400" />
-                <span>Retirar no Balcão</span>
-                <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">Sem taxa</span>
+                <Store className="w-5 h-5 text-purple-700 dark:text-purple-400 shrink-0" />
+                <span className="leading-tight">Retirar no Balcão</span>
+                <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 leading-tight">
+                  Sem taxa
+                </span>
               </button>
             </div>
 
@@ -293,57 +290,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Bairro (Praia Grande) *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Bairro *
+                      </label>
+                      {neighborhood && (
+                        <span className="text-[11px] font-black font-mono text-emerald-600 dark:text-emerald-400">
+                          Taxa: {formatCurrency(deliveryFee)}
+                        </span>
+                      )}
+                    </div>
                     <select
                       required
-                      value={
-                        PRAIA_GRANDE_NEIGHBORHOODS.some(n => n.name.toLowerCase() === neighborhood.trim().toLowerCase())
-                          ? PRAIA_GRANDE_NEIGHBORHOODS.find(n => n.name.toLowerCase() === neighborhood.trim().toLowerCase())!.name
-                          : (neighborhood ? 'OUTRO' : '')
-                      }
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === 'OUTRO') {
-                          setIsCustomNeighborhood(true);
-                          setNeighborhood('');
-                        } else {
-                          setIsCustomNeighborhood(false);
-                          setNeighborhood(val);
-                        }
-                      }}
+                      value={neighborhood}
+                      onChange={e => setNeighborhood(e.target.value)}
                       className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
                     >
-                      <option value="">Selecione seu bairro na PG...</option>
+                      <option value="">Selecione seu bairro...</option>
                       {PRAIA_GRANDE_NEIGHBORHOODS.map(n => (
                         <option key={n.name} value={n.name}>
-                          {n.name} — {formatCurrency(n.fee)}
+                          {n.name}
                         </option>
                       ))}
-                      <option value="OUTRO">Outro bairro de PG / Região</option>
+                      <option value="Outros">Outros</option>
                     </select>
-
-                    {isCustomNeighborhood && (
-                      <input
-                        type="text"
-                        required
-                        placeholder="Digite o nome do seu bairro"
-                        value={neighborhood}
-                        onChange={e => setNeighborhood(e.target.value)}
-                        className="w-full text-xs p-2.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-slate-800 text-slate-900 dark:text-white mt-2"
-                        autoFocus
-                      />
-                    )}
-
-                    {neighborhood && (
-                      <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center justify-between">
-                        <span>Taxa de entrega:</span>
-                        <span className="font-mono bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md">
-                          {formatCurrency(deliveryFee)}
-                        </span>
-                      </div>
-                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Complemento</label>
@@ -515,7 +485,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="flex justify-between">
               <span>Taxa de entrega{orderType === 'ENTREGA' && neighborhood ? ` (${neighborhood})` : ''}:</span>
               <span className="font-bold text-slate-800 dark:text-slate-100">
-                {orderType === 'ENTREGA' ? (neighborhood ? formatCurrency(deliveryFee) : 'A calcular por bairro') : 'Grátis'}
+                {orderType === 'ENTREGA' ? (neighborhood ? formatCurrency(deliveryFee) : 'Selecione o bairro') : 'Grátis'}
               </span>
             </div>
             <div className="flex justify-between text-base font-black text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -523,12 +493,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <span className="text-purple-950 dark:text-amber-400 font-black text-xl">{formatCurrency(total)}</span>
             </div>
           </div>
+        </form>
 
-          {/* Submit Button */}
+        {/* Fixed Footer Bar com o Botão Perfeitamente Enquadrado */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 shrink-0">
           <button
             type="submit"
+            form="checkout-form"
             disabled={isSubmitting || !settings.isOpen}
-            className={`w-full font-black py-4 px-6 rounded-2xl shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 text-base cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+            className={`w-full font-black py-3.5 px-6 rounded-2xl shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
               !settings.isOpen
                 ? 'bg-slate-500 text-white shadow-none'
                 : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 shadow-amber-500/20'
@@ -543,7 +516,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 : `Confirmar Pedido (${formatCurrency(total)})`}
             </span>
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );

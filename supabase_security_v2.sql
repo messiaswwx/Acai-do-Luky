@@ -348,7 +348,7 @@ DECLARE
   v_clean TEXT;
 BEGIN
   IF p_neighborhood IS NULL OR length(trim(p_neighborhood)) = 0 THEN
-    RETURN COALESCE(p_default, 5.00);
+    RETURN COALESCE(p_default, 10.00);
   END IF;
 
   v_clean := translate(lower(trim(p_neighborhood)), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc');
@@ -366,7 +366,7 @@ BEGIN
   IF v_clean LIKE '%aviacao%' THEN RETURN 8.00; END IF;
   IF v_clean LIKE '%antartica%' THEN RETURN 8.00; END IF;
 
-  RETURN COALESCE(p_default, 5.00);
+  RETURN COALESCE(p_default, 10.00);
 END;
 $$;
 

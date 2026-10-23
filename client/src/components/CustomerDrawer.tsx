@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomerProfile, Order, CartItem } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
+import { PRAIA_GRANDE_NEIGHBORHOODS } from '../utils/delivery';
 import { 
   loginCustomer, 
   createCustomer, 
@@ -551,13 +552,17 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Bairro</label>
-                        <input
-                          type="text"
-                          placeholder="Bairro"
+                        <select
                           value={registerForm.neighborhood}
                           onChange={e => setRegisterForm({ ...registerForm, neighborhood: e.target.value })}
                           className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
+                        >
+                          <option value="">Selecione...</option>
+                          {PRAIA_GRANDE_NEIGHBORHOODS.map(n => (
+                            <option key={n.name} value={n.name}>{n.name}</option>
+                          ))}
+                          <option value="Outros">Outros</option>
+                        </select>
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Complemento</label>
@@ -867,13 +872,17 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Bairro</label>
-                        <input
-                          type="text"
-                          placeholder="Bairro"
+                        <select
                           value={editForm.neighborhood}
                           onChange={e => setEditForm({ ...editForm, neighborhood: e.target.value })}
                           className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
+                        >
+                          <option value="">Selecione...</option>
+                          {PRAIA_GRANDE_NEIGHBORHOODS.map(n => (
+                            <option key={n.name} value={n.name}>{n.name}</option>
+                          ))}
+                          <option value="Outros">Outros</option>
+                        </select>
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Complemento</label>
