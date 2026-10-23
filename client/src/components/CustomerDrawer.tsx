@@ -146,8 +146,9 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
   }, [isOpen, customer?.phone, loadOrders]);
 
   // Helper format phone: (11) 99999-9999
-  function formatPhone(val: string): string {
-    const clean = val.replace(/\D/g, '').slice(0, 11);
+  function formatPhone(val?: string | null): string {
+    const clean = String(val || '').replace(/\D/g, '').slice(0, 11);
+    if (!clean) return '';
     if (clean.length <= 2) return clean;
     if (clean.length <= 7) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
     return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
@@ -331,14 +332,14 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
           <div className="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 text-white p-4.5 flex items-center justify-between border-b border-purple-800/60 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-400 text-purple-950 flex items-center justify-center font-black text-base shadow-md">
-                {customer ? customer.name.charAt(0).toUpperCase() : <User className="w-5 h-5 text-purple-950" />}
+                {customer?.name ? customer.name.charAt(0).toUpperCase() : <User className="w-5 h-5 text-purple-950" />}
               </div>
               <div>
                 <h2 className="font-black text-sm text-white">
-                  {customer ? `Olá, ${customer.name.split(' ')[0]}!` : 'Área do Cliente'}
+                  {customer?.name ? `Olá, ${customer.name.split(' ')[0]}!` : 'Área do Cliente'}
                 </h2>
                 <p className="text-[11px] text-purple-200">
-                  {customer ? formatPhone(customer.phone) : 'Faça login para ver seus pedidos e salvar endereço'}
+                  {customer?.phone ? formatPhone(customer.phone) : 'Faça login para ver seus pedidos e salvar endereço'}
                 </p>
               </div>
             </div>

@@ -318,27 +318,50 @@ export function parseOrderRow(row: any): Order {
     cleanNotes = rawNotes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*(\|\s*)?/i, '').trim();
   }
 
+  let parsedItems: any[] = [];
+  if (Array.isArray(row.items)) {
+    parsedItems = row.items;
+  } else if (typeof row.items === 'string') {
+    try {
+      const parsed = JSON.parse(row.items);
+      if (Array.isArray(parsed)) parsedItems = parsed;
+    } catch {}
+  }
+
+  let parsedAddress = undefined;
+  if (row.address && typeof row.address === 'object') {
+    parsedAddress = {
+      street: String(row.address.street || ''),
+      number: String(row.address.number || ''),
+      neighborhood: String(row.address.neighborhood || ''),
+      complement: row.address.complement ? String(row.address.complement) : '',
+      reference: row.address.reference ? String(row.address.reference) : ''
+    };
+  } else if (row.address && typeof row.address === 'string') {
+    parsedAddress = {
+      street: row.address,
+      number: String(row.number || ''),
+      neighborhood: String(row.neighborhood || ''),
+      complement: String(row.complement || ''),
+      reference: String(row.reference || '')
+    };
+  }
+
   return {
     id: row.id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    status: row.status as OrderStatus,
-    customerName: row.customer_name,
-    customerPhone: row.customer_phone,
-    orderType: row.delivery_type,
-    address: row.address ? {
-      street: row.address,
-      number: row.number || '',
-      neighborhood: row.neighborhood || '',
-      complement: row.complement || '',
-      reference: row.reference || ''
-    } : undefined,
-    paymentMethod: row.payment_method,
+    status: (row.status || 'NOVO') as OrderStatus,
+    customerName: row.customer_name || 'Cliente',
+    customerPhone: row.customer_phone || '',
+    orderType: row.delivery_type || 'ENTREGA',
+    address: parsedAddress,
+    paymentMethod: row.payment_method || 'PIX',
     paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
-    items: Array.isArray(row.items) ? row.items : [],
-    subtotal: Number(row.subtotal),
-    deliveryFee: Number(row.delivery_fee),
-    total: Number(row.total),
+    items: parsedItems,
+    subtotal: Number(row.subtotal) || 0,
+    deliveryFee: Number(row.delivery_fee) || 0,
+    total: Number(row.total) || 0,
     notes: cleanNotes || undefined,
     cancellationReason
   };
@@ -657,17 +680,34 @@ export function hasCustomerSession(): boolean {
 }
 
 function parseCustomer(data: any): CustomerProfile {
+  if (!data || typeof data !== 'object') {
+    return { id: '', name: 'Cliente', phone: '' };
+  }
+
+  let address = undefined;
+  if (data.address && typeof data.address === 'object') {
+    address = {
+      street: String(data.address.street || ''),
+      number: String(data.address.number || ''),
+      neighborhood: String(data.address.neighborhood || ''),
+      complement: data.address.complement ? String(data.address.complement) : undefined,
+      reference: data.address.reference ? String(data.address.reference) : undefined
+    };
+  } else if (data.street) {
+    address = {
+      street: String(data.street),
+      number: String(data.number || ''),
+      neighborhood: String(data.neighborhood || ''),
+      complement: data.complement ? String(data.complement) : undefined,
+      reference: data.reference ? String(data.reference) : undefined
+    };
+  }
+
   return {
-    id: data.id,
-    name: data.name,
-    phone: data.phone,
-    address: data.street ? {
-      street: data.street,
-      number: data.number || '',
-      neighborhood: data.neighborhood || '',
-      complement: data.complement || '',
-      reference: data.reference || ''
-    } : undefined,
+    id: String(data.id || ''),
+    name: String(data.name || 'Cliente'),
+    phone: String(data.phone || ''),
+    address,
     createdAt: data.created_at,
     updatedAt: data.updated_at
   };

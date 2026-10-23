@@ -157,7 +157,18 @@ function getInitialStoreSettings(): StoreSettings {
   if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem(CACHED_SETTINGS_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...INITIAL_SETTINGS,
+            ...parsed,
+            storeName: String(parsed.storeName || INITIAL_SETTINGS.storeName),
+            whatsapp: String(parsed.whatsapp || INITIAL_SETTINGS.whatsapp),
+            estimatedTime: String(parsed.estimatedTime || INITIAL_SETTINGS.estimatedTime)
+          };
+        }
+      }
     } catch {}
   }
   return INITIAL_SETTINGS;
@@ -167,7 +178,21 @@ function getInitialMenuData(): MenuData {
   if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem(CACHED_MENU_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.sizes) && parsed.sizes.length > 0) {
+          return {
+            ...INITIAL_MENU,
+            ...parsed,
+            sizes: parsed.sizes,
+            bases: Array.isArray(parsed.bases) ? parsed.bases : INITIAL_MENU.bases,
+            syrups: Array.isArray(parsed.syrups) ? parsed.syrups : INITIAL_MENU.syrups,
+            freeToppings: Array.isArray(parsed.freeToppings) ? parsed.freeToppings : INITIAL_MENU.freeToppings,
+            fruits: Array.isArray(parsed.fruits) ? parsed.fruits : INITIAL_MENU.fruits,
+            premiumToppings: Array.isArray(parsed.premiumToppings) ? parsed.premiumToppings : INITIAL_MENU.premiumToppings
+          };
+        }
+      }
     } catch {}
   }
   return INITIAL_MENU;
@@ -178,28 +203,35 @@ export default function App() {
   const [settings, setSettings] = useState<StoreSettings>(getInitialStoreSettings);
   const [menu, setMenu] = useState<MenuData>(getInitialMenuData);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem(CACHED_SETTINGS_KEY);
-    }
+    try {
+      if (typeof window !== 'undefined') {
+        return !localStorage.getItem(CACHED_SETTINGS_KEY);
+      }
+    } catch {}
     return true;
   });
 
   // Admin Auth State: Exige o PIN toda vez que entra na aba de admin (desbloqueio por sessão/aba)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('luky_admin_unlocked') === 'true';
+    try {
+      return sessionStorage.getItem('luky_admin_unlocked') === 'true';
+    } catch {
+      return false;
+    }
   });
 
   // Customer State
   const [selectedSizeToBuild, setSelectedSizeToBuild] = useState<SizeItem | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
+    try {
+      if (typeof window !== 'undefined') {
         const raw = localStorage.getItem('luky_cart_items');
-        return raw ? JSON.parse(raw) : [];
-      } catch {
-        return [];
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
       }
-    }
+    } catch {}
     return [];
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -207,14 +239,15 @@ export default function App() {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
+    try {
+      if (typeof window !== 'undefined') {
         const raw = localStorage.getItem('luky_active_customer');
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
       }
-    }
+    } catch {}
     return null;
   });
   const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(false);
@@ -491,8 +524,15 @@ export default function App() {
     setIsAdminAuthenticated(false);
   }, []);
 
-  const totalCartCount = useMemo(() => cartItems.reduce((acc, i) => acc + i.quantity, 0), [cartItems]);
-  const totalCartPrice = useMemo(() => cartItems.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0), [cartItems]);
+  const totalCartCount = useMemo(() => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((acc, i) => acc + (Number(i?.quantity) || 1), 0);
+  }, [cartItems]);
+
+  const totalCartPrice = useMemo(() => {
+    if (!Array.isArray(cartItems)) return 0;
+    return cartItems.reduce((acc, i) => acc + (Number(i?.unitPrice) || 0) * (Number(i?.quantity) || 1), 0);
+  }, [cartItems]);
 
   const getSizeBadge = (sizeId: string) => {
     switch (sizeId) {
@@ -572,11 +612,11 @@ export default function App() {
                           ? 'bg-purple-900/90 hover:bg-purple-800 text-white border border-purple-700/60 shadow-xs'
                           : 'bg-white/10 hover:bg-white/20 text-white'
                       }`}
-                      title={customer ? `Conectado como ${customer.name}` : 'Acessar minha conta'}
+                      title={customer ? `Conectado como ${customer.name || 'Cliente'}` : 'Acessar minha conta'}
                     >
                       <User className="w-3.5 h-3.5 text-amber-300" />
                       {customer ? (
-                        <span className="max-w-[100px] truncate">{customer.name.split(' ')[0]}</span>
+                        <span className="max-w-[100px] truncate">{customer.name ? customer.name.split(' ')[0] : 'Conta'}</span>
                       ) : (
                         <>
                           <span className="hidden sm:inline">Minha Conta</span>
@@ -686,7 +726,7 @@ export default function App() {
                       </div>
 
                       <a
-                        href={`https://wa.me/55${settings.whatsapp.replace(/\D/g, '')}`}
+                        href={`https://wa.me/55${String(settings?.whatsapp || '').replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:text-amber-200 bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-full border border-white/10 transition-colors"
@@ -782,7 +822,7 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {menu.sizes.map(size => {
+                    {(Array.isArray(menu?.sizes) && menu.sizes.length > 0 ? menu.sizes : INITIAL_MENU.sizes).map(size => {
                       const badge = getSizeBadge(size.id);
                       const isTopSeller = size.id === 'size-500';
                       const basePrice = size.originalPrice ?? size.price;

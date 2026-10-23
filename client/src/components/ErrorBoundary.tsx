@@ -28,6 +28,14 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ hasError: false, error: undefined });
   };
 
+  public handleClearDataAndReload = () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
+    window.location.reload();
+  };
+
   public render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
@@ -43,24 +51,37 @@ export class ErrorBoundary extends Component<Props, State> {
             <div>
               <h3 className="text-lg font-black text-slate-900 dark:text-white">Algo inesperado aconteceu</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Não foi possível exibir esta tela no momento.
+                Não foi possível exibir a loja no momento. Isso geralmente é resolvido recarregando ou limpando dados temporários.
               </p>
             </div>
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={this.handleReset}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                Tentar Novamente
-              </button>
+
+            {this.state.error && (
+              <details className="text-left bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 overflow-x-auto">
+                <summary className="font-bold cursor-pointer text-slate-700 dark:text-slate-200">
+                  Ver detalhes técnicos do erro
+                </summary>
+                <pre className="mt-2 text-[10px] whitespace-pre-wrap font-mono text-red-600 dark:text-red-400">
+                  {this.state.error.message || String(this.state.error)}
+                  {this.state.error.stack ? `\n\n${this.state.error.stack}` : ''}
+                </pre>
+              </details>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-purple-900 hover:bg-purple-950 text-white text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Recarregar Página</span>
+              </button>
+              <button
+                type="button"
+                onClick={this.handleClearDataAndReload}
+                className="flex-1 py-3 px-4 rounded-xl bg-purple-900 hover:bg-purple-950 text-white text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <span>Limpar Dados & Iniciar</span>
               </button>
             </div>
           </div>

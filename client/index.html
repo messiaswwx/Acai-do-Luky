@@ -7,9 +7,41 @@
     <meta name="theme-color" content="#521c67" />
     <meta name="description" content="Peça o melhor açaí artesanal direto com o Luky, sem taxas abusivas e com entrega rápida!" />
     <title>Açaí do Luky - Delivery & Retirada</title>
+    <script>
+      // Capturador de erro inicial para evitar tela branca em navegadores móveis
+      window.addEventListener('error', function(e) {
+        console.error('Global script error:', e);
+        var root = document.getElementById('root');
+        if (root && (!root.firstElementChild || root.querySelector('#initial-loader'))) {
+          root.innerHTML = '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#521c67;color:#fff;font-family:sans-serif;padding:24px;text-align:center;">' +
+            '<div style="background:#fff;padding:4px;border-radius:50%;width:72px;height:72px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">' +
+              '<img src="/logo.png" alt="Açaí do Luky" style="width:64px;height:64px;border-radius:50%;object-fit:contain;" />' +
+            '</div>' +
+            '<h2 style="font-size:18px;font-weight:900;margin:0 0 8px 0;">Ops! Ocorreu uma instabilidade</h2>' +
+            '<p style="font-size:13px;opacity:0.9;max-width:320px;line-height:1.4;margin:0 0 20px 0;">Toque no botão abaixo para limpar dados temporários e abrir o cardápio atualizado:</p>' +
+            '<button onclick="try{localStorage.clear();sessionStorage.clear();}catch(err){}location.reload();" style="background:#f59e0b;color:#3b0764;border:none;padding:14px 24px;border-radius:16px;font-weight:900;font-size:14px;cursor:pointer;box-shadow:0 10px 20px rgba(0,0,0,0.3);">' +
+              'Atualizar & Abrir Cardápio' +
+            '</button>' +
+          '</div>';
+        }
+      });
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-800 antialiased select-none">
-    <div id="root"></div>
+    <div id="root">
+      {/* Splash Screen inicial nativo para mobile */}
+      <div id="initial-loader" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#521c67;color:#fff;font-family:sans-serif;padding:24px;text-align:center;">
+        <div style="background:#fff;padding:4px;border-radius:50%;width:80px;height:80px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 10px 25px rgba(0,0,0,0.35);">
+          <img src="/logo.png" alt="Logo" style="width:72px;height:72px;border-radius:50%;object-fit:contain;" />
+        </div>
+        <h1 style="font-size:22px;font-weight:900;margin:0 0 6px 0;letter-spacing:0.5px;">Açaí do Luky</h1>
+        <p style="font-size:13px;color:#f3e8ff;margin:0 0 16px 0;font-weight:500;">Carregando o melhor açaí da região...</p>
+        <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.25);border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <style>
+          @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
