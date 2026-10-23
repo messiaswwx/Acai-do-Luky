@@ -302,7 +302,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (id.includes('300') || name.includes('300ml') || name.includes('300 ml')) return 1;
       if (id.includes('500') || name.includes('500ml') || name.includes('500 ml')) return 2;
       if (id.includes('700') || name.includes('700ml') || name.includes('700 ml')) return 3;
-      if (id.includes('1000') || name.includes('1 litro') || name.includes('1l') || name.includes('barca') || name.includes('marmita') || name.includes('1100')) return 4;
+      if (id.includes('1000') || name.includes('1 litro') || name.includes('1l') || name.includes('1,1') || name.includes('1.1') || name.includes('barca') || name.includes('marmita') || name.includes('1100')) return 4;
       return 100;
     };
 

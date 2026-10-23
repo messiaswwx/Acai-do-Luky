@@ -100,8 +100,8 @@ const INITIAL_MENU: MenuData = {
     },
     { 
       id: "size-1000", 
-      name: "Marmita G 1100", 
-      description: "Fartura total de 1100ml para dividir com a galera ou matar a larica!", 
+      name: "Marmita G 1,1L", 
+      description: "Fartura total de 1,1L para dividir com a galera ou matar a larica!", 
       price: 35.00, 
       originalPrice: 35.00, 
       discountPercent: 0, 
@@ -258,7 +258,7 @@ export default function App() {
         fetchOrderById(savedOrderId).then(order => {
           if (order) {
             setActiveOrder(order);
-            if (order.status === 'CANCELADO') {
+            if (order.status !== 'CONCLUIDO') {
               setIsTrackingModalOpen(true);
             }
           }
@@ -269,7 +269,7 @@ export default function App() {
           .then(order => {
             if (order) {
               setActiveOrder(order);
-              if (order.status === 'CANCELADO') {
+              if (order.status !== 'CONCLUIDO') {
                 setIsTrackingModalOpen(true);
               }
             }
@@ -470,7 +470,7 @@ export default function App() {
       case 'size-700':
         return { text: 'Caprichado 🔥', bg: 'bg-orange-100 text-orange-900 border-orange-200' };
       case 'size-1000':
-        return { text: 'Marmita G 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
+        return { text: 'Marmita G 1,1L 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
       default:
         return { text: 'Especial', bg: 'bg-purple-100 text-purple-900 border-purple-200' };
     }

@@ -493,12 +493,36 @@ app.put('/api/menu', requireAdminAuth, (req, res) => {
   res.json(db.menu);
 });
 
+function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 5.00) {
+  if (!neighborhoodName) return fallbackFee;
+  const clean = String(neighborhoodName)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+  if (clean.includes('ocian')) return 4.00;
+  if (clean.includes('tupiry') || clean.includes('tupiri')) return 6.00;
+  if (clean.includes('tupi')) return 5.00;
+  if (clean.includes('quietude')) return 6.00;
+  if (clean.includes('anhanguera')) return 5.00;
+  if (clean.includes('mirim')) return 5.00;
+  if (clean.includes('maracana')) return 7.00;
+  if (clean.includes('ribeiropolis') || clean.includes('ribeiro')) return 7.00;
+  if (clean.includes('esmeralda')) return 8.00;
+  if (clean.includes('samambaia')) return 8.00;
+  if (clean.includes('aviacao')) return 8.00;
+  if (clean.includes('antartica')) return 8.00;
+
+  return fallbackFee;
+}
+
 function getPackagingInventoryId(sizeIdOrName) {
   const s = String(sizeIdOrName || '').toLowerCase();
   if (s.includes('300')) return 'est-copo-300';
   if (s.includes('500')) return 'est-copo-500';
   if (s.includes('700')) return 'est-copo-700';
-  if (s.includes('1000') || s.includes('litro') || s.includes('barca')) return 'est-copo-1000';
+  if (s.includes('1000') || s.includes('litro') || s.includes('barca') || s.includes('marmita') || s.includes('1100') || s.includes('1,1') || s.includes('1.1')) return 'est-copo-1000';
   return null;
 }
 
@@ -579,7 +603,10 @@ app.post('/api/orders', (req, res) => {
     subtotalCalculado += it.unitPrice * qty;
   }
 
-  const deliveryFee = body.orderType === 'ENTREGA' ? (Number(db.settings.deliveryFee) || 0) : 0;
+  const neigh = body.address?.neighborhood || '';
+  const deliveryFee = body.orderType === 'ENTREGA' 
+    ? getDeliveryFeeByNeighborhood(neigh, Number(db.settings.deliveryFee) || 5.00) 
+    : 0;
   const total = Number((subtotalCalculado + deliveryFee).toFixed(2));
 
   const randomHex = Math.random().toString(36).substring(2, 7).toUpperCase();

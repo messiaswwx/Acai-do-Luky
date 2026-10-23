@@ -426,8 +426,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 <p className="text-slate-400 italic text-xs py-2">Detalhes dos itens não disponíveis.</p>
               ) : (
                 items.map((item, idx) => {
-                  const sizeName = item?.size?.name || (typeof item?.size === 'string' ? item.size : 'Açaí');
-                  const baseName = item?.base?.name || (typeof item?.base === 'string' ? item.base : null);
+                  const sizeName = typeof item?.size?.name === 'string' ? item.size.name : (typeof item?.size === 'string' ? item.size : 'Açaí');
+                  const baseName = typeof item?.base?.name === 'string' ? item.base.name : (typeof item?.base === 'string' ? item.base : null);
                   const rawFree = Array.isArray(item?.freeToppings) ? item.freeToppings : [];
                   const freeToppings = rawFree.filter((t: any) => !String(t?.id || '').startsWith('fruit-'));
                   const fruits = Array.isArray(item?.fruits) && item.fruits.length > 0
@@ -438,6 +438,31 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                   const unitPrice = Number(item?.unitPrice) || 0;
                   const quantity = Number(item?.quantity) || 1;
 
+                  const syrupNames = syrups
+                    .map((s: any) => typeof s === 'string' ? s : (typeof s?.name === 'string' ? s.name : ''))
+                    .filter(Boolean)
+                    .join(', ');
+
+                  const freeNames = freeToppings
+                    .map((t: any) => typeof t === 'string' ? t : (typeof t?.name === 'string' ? t.name : ''))
+                    .filter(Boolean)
+                    .join(', ');
+
+                  const fruitNames = fruits
+                    .map((f: any) => typeof f === 'string' ? f : (typeof f?.name === 'string' ? f.name : ''))
+                    .filter(Boolean)
+                    .join(', ');
+
+                  const premiumNames = premiumToppings
+                    .map((p: any) => {
+                      const pName = typeof p?.item?.name === 'string' ? p.item.name : (typeof p?.name === 'string' ? p.name : (typeof p === 'string' ? p : ''));
+                      if (!pName) return '';
+                      const pQty = (Number(p?.quantity) || 1) > 1 ? `${p.quantity}x ` : '';
+                      return `${pQty}${pName}`;
+                    })
+                    .filter(Boolean)
+                    .join(', ');
+
                   return (
                     <div key={item?.id || idx} className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/60 space-y-1">
                       <div className="flex justify-between font-bold text-slate-900 dark:text-white">
@@ -447,28 +472,24 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                       {baseName && (
                         <p className="text-purple-700 dark:text-purple-300 font-semibold text-[11px]">Base: {baseName}</p>
                       )}
-                      {syrups.length > 0 && (
+                      {syrupNames && (
                         <p className="text-purple-700 dark:text-purple-300 text-[11px]">
-                          Calda: {syrups.map((s: any) => s?.name || s).filter(Boolean).join(', ')}
+                          Calda: {syrupNames}
                         </p>
                       )}
-                      {freeToppings.length > 0 && (
+                      {freeNames && (
                         <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-                          Complementos: {freeToppings.map((t: any) => t?.name || t).filter(Boolean).join(', ')}
+                          Complementos: {freeNames}
                         </p>
                       )}
-                      {fruits.length > 0 && (
+                      {fruitNames && (
                         <p className="text-rose-600 dark:text-rose-400 text-[11px]">
-                          Frutas: {fruits.map((f: any) => f?.name || f).filter(Boolean).join(', ')}
+                          Frutas: {fruitNames}
                         </p>
                       )}
-                      {premiumToppings.length > 0 && (
+                      {premiumNames && (
                         <p className="text-amber-700 dark:text-amber-400 font-medium text-[11px]">
-                          Extras: {premiumToppings.map((p: any) => {
-                            const pName = p?.item?.name || p?.name || p;
-                            const pQty = p?.quantity > 1 ? `${p.quantity}x ` : '';
-                            return `${pQty}${pName}`;
-                          }).filter(Boolean).join(', ')}
+                          Extras: {premiumNames}
                         </p>
                       )}
                       {(() => {
@@ -483,9 +504,22 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               )}
             </div>
 
-            <div className="flex justify-between font-black text-slate-900 dark:text-white text-sm pt-2">
-              <span>Total:</span>
-              <span className="text-purple-950 dark:text-amber-400 font-black text-lg font-mono">{formatCurrency(order?.total || 0)}</span>
+            {/* Totais do Pedido */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Subtotal dos itens:</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatCurrency(order?.subtotal || 0)}</span>
+              </div>
+              {order?.orderType === 'ENTREGA' && (
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Taxa de entrega{order?.address?.neighborhood ? ` (${order.address.neighborhood})` : ''}:</span>
+                  <span className="font-mono font-bold text-purple-700 dark:text-amber-400">{formatCurrency(order?.deliveryFee || 0)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-slate-900 dark:text-white text-sm pt-1 border-t border-slate-100 dark:border-slate-800">
+                <span>Total:</span>
+                <span className="text-purple-950 dark:text-amber-400 font-black text-lg font-mono">{formatCurrency(order?.total || 0)}</span>
+              </div>
             </div>
           </div>
         </div>

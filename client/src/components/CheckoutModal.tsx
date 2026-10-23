@@ -5,6 +5,7 @@ import { X, Bike, Store, QrCode, CreditCard, ShieldCheck, Copy, Check, ArrowLeft
 import { isSupabaseConfigured } from '../utils/supabase';
 import { createOrder } from '../services/supabaseService';
 import { sanitizeText, sanitizePhone } from '../utils/sanitize';
+import { PRAIA_GRANDE_NEIGHBORHOODS, getDeliveryFeeByNeighborhood } from '../utils/delivery';
 
 interface CheckoutModalProps {
   items: CartItem[];
@@ -33,6 +34,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [neighborhood, setNeighborhood] = useState(() => customer?.address?.neighborhood || '');
   const [complement, setComplement] = useState(() => customer?.address?.complement || '');
   const [reference, setReference] = useState(() => customer?.address?.reference || '');
+  const [isCustomNeighborhood, setIsCustomNeighborhood] = useState(() => {
+    if (!customer?.address?.neighborhood) return false;
+    return !PRAIA_GRANDE_NEIGHBORHOODS.some(
+      n => n.name.toLowerCase() === (customer.address?.neighborhood || '').trim().toLowerCase()
+    );
+  });
 
   // Payment: 100% Online (Mercado Pago: Pix e Cartões)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
@@ -46,7 +53,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     () => items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0),
     [items]
   );
-  const deliveryFee = orderType === 'ENTREGA' ? settings.deliveryFee : 0;
+  const deliveryFee = useMemo(() => {
+    if (orderType !== 'ENTREGA') return 0;
+    return getDeliveryFeeByNeighborhood(neighborhood, settings.deliveryFee);
+  }, [orderType, neighborhood, settings.deliveryFee]);
   const total = subtotal + deliveryFee;
 
   const copyPixKey = () => {
@@ -234,7 +244,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Bike className="w-5 h-5 text-purple-700 dark:text-purple-400" />
                 <span>Receber em Casa</span>
                 <span className="text-[11px] font-black text-amber-600 dark:text-amber-400">
-                  Taxa: {formatCurrency(settings.deliveryFee)}
+                  {neighborhood ? `Taxa: ${formatCurrency(deliveryFee)}` : 'A partir de R$ 4,00'}
                 </span>
               </button>
 
@@ -283,15 +293,57 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Bairro *</label>
-                    <input
-                      type="text"
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Bairro (Praia Grande) *
+                    </label>
+                    <select
                       required
-                      placeholder="Ex: Centro"
-                      value={neighborhood}
-                      onChange={e => setNeighborhood(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
+                      value={
+                        PRAIA_GRANDE_NEIGHBORHOODS.some(n => n.name.toLowerCase() === neighborhood.trim().toLowerCase())
+                          ? PRAIA_GRANDE_NEIGHBORHOODS.find(n => n.name.toLowerCase() === neighborhood.trim().toLowerCase())!.name
+                          : (neighborhood ? 'OUTRO' : '')
+                      }
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'OUTRO') {
+                          setIsCustomNeighborhood(true);
+                          setNeighborhood('');
+                        } else {
+                          setIsCustomNeighborhood(false);
+                          setNeighborhood(val);
+                        }
+                      }}
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
+                    >
+                      <option value="">Selecione seu bairro na PG...</option>
+                      {PRAIA_GRANDE_NEIGHBORHOODS.map(n => (
+                        <option key={n.name} value={n.name}>
+                          {n.name} — {formatCurrency(n.fee)}
+                        </option>
+                      ))}
+                      <option value="OUTRO">Outro bairro de PG / Região</option>
+                    </select>
+
+                    {isCustomNeighborhood && (
+                      <input
+                        type="text"
+                        required
+                        placeholder="Digite o nome do seu bairro"
+                        value={neighborhood}
+                        onChange={e => setNeighborhood(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-slate-800 text-slate-900 dark:text-white mt-2"
+                        autoFocus
+                      />
+                    )}
+
+                    {neighborhood && (
+                      <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center justify-between">
+                        <span>Taxa de entrega:</span>
+                        <span className="font-mono bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md">
+                          {formatCurrency(deliveryFee)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Complemento</label>
@@ -461,9 +513,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <span className="font-bold text-slate-800 dark:text-slate-100">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Taxa de entrega:</span>
+              <span>Taxa de entrega{orderType === 'ENTREGA' && neighborhood ? ` (${neighborhood})` : ''}:</span>
               <span className="font-bold text-slate-800 dark:text-slate-100">
-                {orderType === 'ENTREGA' ? formatCurrency(deliveryFee) : 'Grátis'}
+                {orderType === 'ENTREGA' ? (neighborhood ? formatCurrency(deliveryFee) : 'A calcular por bairro') : 'Grátis'}
               </span>
             </div>
             <div className="flex justify-between text-base font-black text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">

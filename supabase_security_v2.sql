@@ -332,9 +332,41 @@ BEGIN
     IF s LIKE '%300%' THEN RETURN 'est-copo-300'; END IF;
     IF s LIKE '%500%' THEN RETURN 'est-copo-500'; END IF;
     IF s LIKE '%700%' THEN RETURN 'est-copo-700'; END IF;
-    IF s LIKE '%1000%' OR s LIKE '%1100%' OR s LIKE '%litro%' OR s LIKE '%barca%' OR s LIKE '%marmita%' THEN RETURN 'est-copo-1000'; END IF;
+    IF s LIKE '%1000%' OR s LIKE '%1100%' OR s LIKE '%1,1%' OR s LIKE '%1.1%' OR s LIKE '%litro%' OR s LIKE '%barca%' OR s LIKE '%marmita%' THEN RETURN 'est-copo-1000'; END IF;
   END LOOP;
   RETURN NULL;
+END;
+$$;
+
+-- Função que calcula a taxa de entrega pelos bairros de Praia Grande (PG)
+CREATE OR REPLACE FUNCTION public._calc_delivery_fee(p_neighborhood TEXT, p_default NUMERIC)
+RETURNS NUMERIC
+LANGUAGE plpgsql IMMUTABLE
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_clean TEXT;
+BEGIN
+  IF p_neighborhood IS NULL OR length(trim(p_neighborhood)) = 0 THEN
+    RETURN COALESCE(p_default, 5.00);
+  END IF;
+
+  v_clean := translate(lower(trim(p_neighborhood)), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc');
+
+  IF v_clean LIKE '%ocian%' THEN RETURN 4.00; END IF;
+  IF v_clean LIKE '%tupiry%' OR v_clean LIKE '%tupiri%' THEN RETURN 6.00; END IF;
+  IF v_clean LIKE '%tupi%' THEN RETURN 5.00; END IF;
+  IF v_clean LIKE '%quietude%' THEN RETURN 6.00; END IF;
+  IF v_clean LIKE '%anhanguera%' THEN RETURN 5.00; END IF;
+  IF v_clean LIKE '%mirim%' THEN RETURN 5.00; END IF;
+  IF v_clean LIKE '%maracana%' THEN RETURN 7.00; END IF;
+  IF v_clean LIKE '%ribeiropolis%' OR v_clean LIKE '%ribeiro%' THEN RETURN 7.00; END IF;
+  IF v_clean LIKE '%esmeralda%' THEN RETURN 8.00; END IF;
+  IF v_clean LIKE '%samambaia%' THEN RETURN 8.00; END IF;
+  IF v_clean LIKE '%aviacao%' THEN RETURN 8.00; END IF;
+  IF v_clean LIKE '%antartica%' THEN RETURN 8.00; END IF;
+
+  RETURN COALESCE(p_default, 5.00);
 END;
 $$;
 
@@ -839,7 +871,7 @@ BEGIN
     IF v_street IS NULL OR v_number IS NULL OR v_neigh IS NULL THEN
       RETURN jsonb_build_object('success', false, 'error', 'Preencha rua, número e bairro.');
     END IF;
-    v_fee := COALESCE(v_settings.delivery_fee, 0);
+    v_fee := public._calc_delivery_fee(v_neigh, v_settings.delivery_fee);
   END IF;
 
   -- Itens: tudo é reconstruído a partir do cardápio oficial
