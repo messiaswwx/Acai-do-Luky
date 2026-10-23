@@ -202,6 +202,33 @@ function getInitialMenuData(): MenuData {
   return INITIAL_MENU;
 }
 
+export function sanitizeOrder(obj: unknown): Order | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const o = obj as Record<string, unknown>;
+  const id = typeof o.id === 'string' ? o.id.trim() : '';
+  if (!id) return null;
+
+  return {
+    id,
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : undefined,
+    status: (typeof o.status === 'string' ? o.status : 'NOVO') as any,
+    customerName: String(o.customerName || 'Cliente'),
+    customerPhone: String(o.customerPhone || ''),
+    orderType: o.orderType === 'RETIRADA' ? 'RETIRADA' : 'ENTREGA',
+    address: o.address && typeof o.address === 'object' ? (o.address as any) : undefined,
+    paymentMethod: (o.paymentMethod || 'PIX') as any,
+    paymentDetails: o.paymentDetails && typeof o.paymentDetails === 'object' ? (o.paymentDetails as any) : undefined,
+    items: Array.isArray(o.items) ? o.items.filter(Boolean) : [],
+    subtotal: Number(o.subtotal) || 0,
+    deliveryFee: Number(o.deliveryFee) || 0,
+    total: Number(o.total) || 0,
+    notes: typeof o.notes === 'string' ? o.notes : undefined,
+    needCutlery: o.needCutlery !== false,
+    cancellationReason: typeof o.cancellationReason === 'string' ? o.cancellationReason : undefined
+  };
+}
+
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
   const [settings, setSettings] = useState<StoreSettings>(getInitialStoreSettings);
@@ -245,8 +272,7 @@ export default function App() {
       if (typeof window !== 'undefined') {
         const raw = localStorage.getItem('luky_cached_active_order');
         if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') return parsed;
+          return sanitizeOrder(JSON.parse(raw));
         }
       }
     } catch {}
@@ -325,33 +351,55 @@ export default function App() {
           localStorage.setItem('luky_active_order_id', orderIdFromUrl);
 
           const handleMpOrder = (order: Order | null) => {
-            if (order) {
+            let sanitized = sanitizeOrder(order);
+            if (sanitized) {
               if (mpStatus === 'approved') {
-                order = {
-                  ...order,
+                sanitized = {
+                  ...sanitized,
                   paymentDetails: {
-                    ...order.paymentDetails,
+                    ...sanitized.paymentDetails,
                     isPaid: true,
                     mercadoPagoStatus: 'approved'
                   }
                 };
               }
-              setActiveOrder(order);
+              setActiveOrder(sanitized);
               try {
-                localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+                localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+                localStorage.setItem('luky_active_order_id', sanitized.id);
               } catch {}
               setIsTrackingModalOpen(true);
             }
           };
 
           if (isSupabaseConfigured) {
-            fetchOrderById(orderIdFromUrl).then(handleMpOrder).catch(() => {});
+            fetchOrderById(orderIdFromUrl)
+              .then(order => {
+                if (order) handleMpOrder(order);
+                else {
+                  fetch(`/api/orders/${orderIdFromUrl}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(handleMpOrder)
+                    .catch(() => {});
+                }
+              })
+              .catch(() => {
+                fetch(`/api/orders/${orderIdFromUrl}`)
+                  .then(r => r.ok ? r.json() : null)
+                  .then(handleMpOrder)
+                  .catch(() => {});
+              });
           } else {
-            fetch(`/api/orders/${orderIdFromUrl}`).then(r => r.ok ? r.json() : null).then(handleMpOrder).catch(() => {});
+            fetch(`/api/orders/${orderIdFromUrl}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(handleMpOrder)
+              .catch(() => {});
           }
 
           // Limpa a URL para remover os parâmetros da barra de endereço
-          window.history.replaceState({}, document.title, window.location.pathname);
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch {}
           return;
         }
       } catch {}
@@ -362,16 +410,23 @@ export default function App() {
       savedOrderId = localStorage.getItem('luky_active_order_id');
     } catch {}
 
-    if (savedOrderId) {
+    if (savedOrderId && savedOrderId !== 'undefined' && savedOrderId !== 'null') {
       const applyOrder = (order: Order | null) => {
-        if (order) {
-          setActiveOrder(order);
+        const sanitized = sanitizeOrder(order);
+        if (sanitized) {
+          setActiveOrder(sanitized);
           try {
-            localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+            localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+            localStorage.setItem('luky_active_order_id', sanitized.id);
           } catch {}
-          if (order.status !== 'CONCLUIDO') {
+          if (sanitized.status !== 'CONCLUIDO') {
             setIsTrackingModalOpen(true);
           }
+        } else {
+          try {
+            localStorage.removeItem('luky_active_order_id');
+            localStorage.removeItem('luky_cached_active_order');
+          } catch {}
         }
       };
 
@@ -405,30 +460,50 @@ export default function App() {
   // Monitora alterações em tempo real no pedido ativo do cliente
   useEffect(() => {
     if (!activeOrder?.id) return;
+    const currentOrderId = activeOrder.id;
 
     const handleActiveOrderUpdate = (updated: Order) => {
-      if (updated.id === activeOrder.id) {
-        if (activeOrder.status !== 'CANCELADO' && updated.status === 'CANCELADO') {
-          playCancellationAlert();
-          setIsTrackingModalOpen(true);
+      try {
+        const sanitized = sanitizeOrder(updated);
+        if (!sanitized) return;
+        if (sanitized.id === currentOrderId) {
+          if (activeOrder.status !== 'CANCELADO' && sanitized.status === 'CANCELADO') {
+            playCancellationAlert();
+            setIsTrackingModalOpen(true);
+          }
+          setActiveOrder(sanitized);
+          try {
+            localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+          } catch {}
         }
-        setActiveOrder(updated);
+      } catch (err) {
+        console.warn('Erro ao atualizar pedido ativo:', err);
       }
     };
 
-    const socket = getSocket();
-    socket.emit('track_order', activeOrder.id);
-    socket.on('my_order_update', handleActiveOrderUpdate);
-    socket.on('order_status_updated', handleActiveOrderUpdate);
+    let socketCleanup = () => {};
+    try {
+      const socket = getSocket();
+      socket.emit('track_order', currentOrderId);
+      socket.on('my_order_update', handleActiveOrderUpdate);
+      socket.on('order_status_updated', handleActiveOrderUpdate);
+      socketCleanup = () => {
+        socket.off('my_order_update', handleActiveOrderUpdate);
+        socket.off('order_status_updated', handleActiveOrderUpdate);
+      };
+    } catch {}
 
     let unsubSupabase = () => {};
     if (isSupabaseConfigured) {
-      unsubSupabase = subscribeToOrder(activeOrder.id, handleActiveOrderUpdate);
+      try {
+        unsubSupabase = subscribeToOrder(currentOrderId, handleActiveOrderUpdate);
+      } catch (err) {
+        console.warn('Erro ao assinar realtime para pedido ativo:', err);
+      }
     }
 
     return () => {
-      socket.off('my_order_update', handleActiveOrderUpdate);
-      socket.off('order_status_updated', handleActiveOrderUpdate);
+      socketCleanup();
       unsubSupabase();
     };
   }, [activeOrder?.id, activeOrder?.status]);
@@ -554,27 +629,35 @@ export default function App() {
   }, []);
 
   const handleTrackCustomerOrder = useCallback((order: Order) => {
-    setActiveOrder(order);
-    try {
-      localStorage.setItem('luky_active_order_id', order.id);
-      localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
-    } catch {}
-    setIsTrackingModalOpen(true);
+    const sanitized = sanitizeOrder(order);
+    if (sanitized) {
+      setActiveOrder(sanitized);
+      try {
+        localStorage.setItem('luky_active_order_id', sanitized.id);
+        localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+      } catch {}
+      setIsTrackingModalOpen(true);
+    }
   }, []);
 
   const handleOrderSuccess = useCallback((order: Order) => {
+    const sanitized = sanitizeOrder(order);
     setCartItems([]);
     try {
       localStorage.removeItem('luky_cart_items');
-      localStorage.setItem('luky_active_order_id', order.id);
-      localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+      if (sanitized) {
+        localStorage.setItem('luky_active_order_id', sanitized.id);
+        localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+      }
     } catch {
       // ignore
     }
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
-    setActiveOrder(order);
-    setIsTrackingModalOpen(true);
+    if (sanitized) {
+      setActiveOrder(sanitized);
+      setIsTrackingModalOpen(true);
+    }
   }, []);
 
   const handleCloseTracking = useCallback(() => {
@@ -609,11 +692,12 @@ export default function App() {
         const res = await fetch(`/api/orders/${q}`);
         if (res.ok) order = await res.json();
       }
-      if (order) {
-        setActiveOrder(order);
+      const sanitized = sanitizeOrder(order);
+      if (sanitized) {
+        setActiveOrder(sanitized);
         try {
-          localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
-          localStorage.setItem('luky_active_order_id', order.id);
+          localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+          localStorage.setItem('luky_active_order_id', sanitized.id);
         } catch {}
         setIsSearchOrderOpen(false);
         setIsTrackingModalOpen(true);
@@ -1186,15 +1270,31 @@ export default function App() {
                 <ErrorBoundary
                   fallback={
                     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-                      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-sm w-full text-center space-y-4">
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl border border-purple-200 dark:border-purple-900/50">
                         <p className="font-black text-sm text-slate-800 dark:text-white">Não foi possível carregar os detalhes do pedido no momento.</p>
-                        <button
-                          type="button"
-                          onClick={() => setIsTrackingModalOpen(false)}
-                          className="w-full py-2.5 bg-purple-900 hover:bg-purple-950 text-white rounded-xl text-xs font-bold cursor-pointer"
-                        >
-                          Fechar
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsTrackingModalOpen(false)}
+                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                          >
+                            Fechar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                localStorage.removeItem('luky_active_order_id');
+                                localStorage.removeItem('luky_cached_active_order');
+                              } catch {}
+                              setActiveOrder(null);
+                              setIsTrackingModalOpen(false);
+                            }}
+                            className="flex-1 py-2.5 bg-purple-900 hover:bg-purple-950 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                          >
+                            Voltar ao Início
+                          </button>
+                        </div>
                       </div>
                     </div>
                   }

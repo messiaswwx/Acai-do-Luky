@@ -55,7 +55,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const orderId = order?.id || '';
   const currentStatus = order?.status || 'NOVO';
   const isCancelled = currentStatus === 'CANCELADO';
-  const items = Array.isArray(order?.items) ? order.items : [];
+  const items = (Array.isArray(order?.items) ? order.items : []).filter(Boolean);
 
   const handleVerifyPayment = async () => {
     if (!orderId) return;
@@ -103,13 +103,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     if (!orderId) return;
 
     const handleOrderUpdate = (updated: Order) => {
-      if (!updated) return;
-      if (updated.id === orderId) {
-        if (previousStatusRef.current !== 'CANCELADO' && updated.status === 'CANCELADO') {
-          playCancellationAlert();
+      try {
+        if (!updated || typeof updated !== 'object' || !updated.id) return;
+        if (updated.id === orderId) {
+          if (previousStatusRef.current !== 'CANCELADO' && updated.status === 'CANCELADO') {
+            playCancellationAlert();
+          }
+          previousStatusRef.current = updated.status;
+          setOrder(updated);
         }
-        previousStatusRef.current = updated.status;
-        setOrder(updated);
+      } catch (err) {
+        console.warn('Erro ao processar atualização do pedido:', err);
       }
     };
 
@@ -535,6 +539,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 <p className="text-slate-400 italic text-xs py-2">Detalhes dos itens não disponíveis.</p>
               ) : (
                 items.map((item, idx) => {
+                  if (!item || typeof item !== 'object') return null;
                   const sizeName = typeof item?.size?.name === 'string' ? item.size.name : (typeof item?.size === 'string' ? item.size : 'Açaí');
                   const baseName = typeof item?.base?.name === 'string' ? item.base.name : (typeof item?.base === 'string' ? item.base : null);
                   const rawFree = Array.isArray(item?.freeToppings) ? item.freeToppings : [];

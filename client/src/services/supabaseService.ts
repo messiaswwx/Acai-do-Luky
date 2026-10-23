@@ -113,29 +113,48 @@ function subscribeToSignal(field: SignalField, onChange: () => void, channelName
   if (!isSupabaseConfigured || !client) return () => {};
 
   let lastVersion: number | null = null;
+  let channel: any = null;
 
-  const channel = client
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'realtime_signal' },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>;
-        const v = Number(row?.[field]);
-        if (lastVersion === null || v !== lastVersion) {
-          lastVersion = v;
-          onChange();
+  try {
+    channel = client
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'realtime_signal' },
+        (payload) => {
+          try {
+            const row = payload.new as Record<string, unknown>;
+            const v = Number(row?.[field]);
+            if (lastVersion === null || v !== lastVersion) {
+              lastVersion = v;
+              onChange();
+            }
+          } catch (e) {
+            console.warn('Erro ao processar payload realtime:', e);
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe();
+  } catch (err) {
+    console.warn(`Aviso: Realtime indisponível para ${channelName}, usando polling:`, err);
+  }
 
   // Polling de segurança caso o Realtime caia
-  const interval = window.setInterval(onChange, POLL_INTERVAL_MS);
+  const interval = window.setInterval(() => {
+    try {
+      onChange();
+    } catch (e) {
+      console.warn('Erro no ciclo de polling:', e);
+    }
+  }, POLL_INTERVAL_MS);
 
   return () => {
     window.clearInterval(interval);
-    client.removeChannel(channel);
+    if (channel) {
+      try {
+        client.removeChannel(channel);
+      } catch {}
+    }
   };
 }
 
@@ -639,7 +658,8 @@ export function subscribeToOrder(
   };
 
   refresh();
-  return subscribeToSignal('orders_version', refresh, `order-track-${orderId}`);
+  const uniqueChannel = `order-track-${orderId}-${Math.random().toString(36).substring(2, 7)}`;
+  return subscribeToSignal('orders_version', refresh, uniqueChannel);
 }
 
 export function subscribeToInventory(onUpdate: (item: InventoryItem) => void) {
