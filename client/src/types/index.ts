@@ -7,7 +7,10 @@ export interface SizeItem {
   discountPercent?: number;
   discountHours?: number;
   discountExpiresAt?: string;
-  maxFreeToppings: number;
+  maxFreeToppings?: number;
+  maxComplements?: number;
+  maxFruits?: number;
+  maxSyrups?: number;
   available: boolean;
 }
 
@@ -18,6 +21,12 @@ export interface BaseItem {
 }
 
 export interface FreeToppingItem {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
+export interface FruitItem {
   id: string;
   name: string;
   available: boolean;
@@ -40,6 +49,7 @@ export interface MenuData {
   sizes: SizeItem[];
   bases: BaseItem[];
   freeToppings: FreeToppingItem[];
+  fruits?: FruitItem[];
   premiumToppings: PremiumToppingItem[];
   syrups: SyrupItem[];
 }
@@ -64,6 +74,7 @@ export interface CartItem {
   size: SizeItem;
   base: BaseItem;
   freeToppings: FreeToppingItem[];
+  fruits?: FruitItem[];
   premiumToppings: { item: PremiumToppingItem; quantity: number }[];
   syrups: SyrupItem[];
   notes: string;

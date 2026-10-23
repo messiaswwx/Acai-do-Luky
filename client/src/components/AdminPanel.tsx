@@ -302,7 +302,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (id.includes('300') || name.includes('300ml') || name.includes('300 ml')) return 1;
       if (id.includes('500') || name.includes('500ml') || name.includes('500 ml')) return 2;
       if (id.includes('700') || name.includes('700ml') || name.includes('700 ml')) return 3;
-      if (id.includes('1000') || name.includes('1 litro') || name.includes('1l') || name.includes('barca')) return 4;
+      if (id.includes('1000') || name.includes('1 litro') || name.includes('1l') || name.includes('barca') || name.includes('marmita') || name.includes('1100')) return 4;
       return 100;
     };
 
@@ -393,13 +393,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleToggleItemAvailability = (
-    category: 'sizes' | 'bases' | 'freeToppings' | 'premiumToppings' | 'syrups',
+    category: 'sizes' | 'bases' | 'freeToppings' | 'fruits' | 'premiumToppings' | 'syrups',
     itemId: string
   ) => {
     setEditableMenu(prev => {
       const updated = { ...prev };
+      // Se for fruta, garante que o array existe
+      if (category === 'fruits' && !updated.fruits) {
+        updated.fruits = [
+          { id: 'fruit-banana', name: 'Banana', available: true },
+          { id: 'fruit-morango', name: 'Morango', available: true },
+          { id: 'fruit-kiwi', name: 'Kiwi', available: true },
+          { id: 'fruit-manga', name: 'Manga', available: true },
+          { id: 'fruit-uva', name: 'Uva', available: true }
+        ];
+      }
       // @ts-ignore
-      updated[category] = updated[category].map((item: any) => 
+      updated[category] = (updated[category] || []).map((item: any) => 
         item.id === itemId ? { ...item, available: !item.available } : item
       );
       return updated;
@@ -743,35 +753,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
 
                     <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="bg-slate-50/70 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">
-                          <div className="flex justify-between font-bold text-slate-900 dark:text-white">
-                            <span>{item.quantity}x {item.size.name}</span>
-                            <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
+                      {order.items.map((item, idx) => {
+                        const complements = (item.freeToppings || []).filter(t => !t.id?.startsWith('fruit-'));
+                        const fruits = (item.fruits && item.fruits.length > 0)
+                          ? item.fruits
+                          : (item.freeToppings || []).filter(t => t.id?.startsWith('fruit-'));
+
+                        return (
+                          <div key={idx} className="bg-slate-50/70 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                            <div className="flex justify-between font-bold text-slate-900 dark:text-white">
+                              <span>{item.quantity}x {item.size.name}</span>
+                              <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
+                            </div>
+                            <p className="text-purple-800 dark:text-purple-300 font-semibold">{item.base.name}</p>
+                            {item.syrups && item.syrups.length > 0 && (
+                              <p className="text-purple-700 dark:text-purple-400">
+                                <span className="font-semibold">Calda:</span> {item.syrups.map(s => s.name).join(', ')}
+                              </p>
+                            )}
+                            {complements.length > 0 && (
+                              <p className="text-slate-600 dark:text-slate-300">
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">Comp:</span> {complements.map(t => t.name).join(', ')}
+                              </p>
+                            )}
+                            {fruits.length > 0 && (
+                              <p className="text-rose-600 dark:text-rose-400">
+                                <span className="font-semibold">Frutas:</span> {fruits.map(f => f.name).join(', ')}
+                              </p>
+                            )}
+                            {item.premiumToppings.length > 0 && (
+                              <p className="text-amber-700 dark:text-amber-400">
+                                <span className="font-semibold">Extras:</span> {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}
+                              </p>
+                            )}
+                            {item.notes && (
+                              <p className="italic text-purple-950 dark:text-amber-200 font-bold bg-amber-100/70 dark:bg-amber-950/60 border border-transparent dark:border-amber-800 p-1 rounded mt-1">
+                                Obs: {item.notes}
+                              </p>
+                            )}
                           </div>
-                          <p className="text-purple-800 dark:text-purple-300 font-semibold">{item.base.name}</p>
-                          {item.freeToppings.length > 0 && (
-                            <p className="text-slate-600 dark:text-slate-300">
-                              <span className="font-semibold text-slate-700 dark:text-slate-200">Acomp:</span> {item.freeToppings.map(t => t.name).join(', ')}
-                            </p>
-                          )}
-                          {item.premiumToppings.length > 0 && (
-                            <p className="text-amber-700 dark:text-amber-400">
-                              <span className="font-semibold">Extras:</span> {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}
-                            </p>
-                          )}
-                          {item.syrups.length > 0 && (
-                            <p className="text-purple-700 dark:text-purple-400">
-                              <span className="font-semibold">Caldas:</span> {item.syrups.map(s => s.name).join(', ')}
-                            </p>
-                          )}
-                          {item.notes && (
-                            <p className="italic text-purple-950 dark:text-amber-200 font-bold bg-amber-100/70 dark:bg-amber-950/60 border border-transparent dark:border-amber-800 p-1 rounded mt-1">
-                              Obs: {item.notes}
-                            </p>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
@@ -1230,6 +1252,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               ))}
             </div>
           </div>
+
+          {/* 6. FRUTAS FRESCAS */}
+          {editableMenu.fruits && editableMenu.fruits.length > 0 && (
+            <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <h3 className="font-black text-sm text-purple-900 dark:text-amber-300 uppercase tracking-wider">Frutas Frescas</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {editableMenu.fruits.map(item => (
+                  <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">{item.name}</span>
+                    <button
+                      onClick={() => handleToggleItemAvailability('fruits', item.id)}
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors cursor-pointer ${
+                        item.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
+                      }`}
+                    >
+                      {item.available ? 'OK' : 'Falta'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Bottom Save Button Reminder */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end">

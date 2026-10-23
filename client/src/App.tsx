@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { SizeItem, CartItem, Order, MenuData, StoreSettings, CustomerProfile } from './types';
 import { formatCurrency } from './utils/format';
-import { isDiscountActive, getRemainingHoursText } from './utils/promo';
+import { isDiscountActive, getRemainingHoursText, getSizeLimits } from './utils/promo';
 import { getSocket } from './utils/socket';
 import { useTheme } from './utils/theme';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -47,22 +47,70 @@ import {
 const INITIAL_SETTINGS: StoreSettings = {
   storeName: "Açaí do Luky",
   isOpen: true,
-  whatsapp: "5511999999999",
+  whatsapp: "5513991886260",
   pixKey: "lukyacai@exemplo.com",
   pixKeyType: "Chave E-mail",
   deliveryFee: 5.00,
   estimatedTime: "30 - 45 min",
-  address: "Rua do Açaí, 123 - Centro",
+  address: "R. Eufrozina maria da conceição, 119",
   minOrderValue: 12.00,
   adminPin: "1234"
 };
 
 const INITIAL_MENU: MenuData = {
   sizes: [
-    { id: "size-300", name: "Copo 300ml", description: "Perfeito para matar aquela vontade de forma rápida e refrescante.", price: 14.00, originalPrice: 14.00, discountPercent: 0, maxFreeToppings: 3, available: true },
-    { id: "size-500", name: "Copo 500ml", description: "O queridinho da galera! Equilíbrio ideal entre açaí e acompanhamentos.", price: 17.00, originalPrice: 20.00, discountPercent: 15, maxFreeToppings: 3, available: true },
-    { id: "size-700", name: "Copo 700ml", description: "Tamanho caprichado para quem ama açaí de verdade.", price: 26.00, originalPrice: 26.00, discountPercent: 0, maxFreeToppings: 4, available: true },
-    { id: "size-1000", name: "Barca Especial 1 Litro", description: "Serve até 3 pessoas com muita fartura, amor e recheio!", price: 45.00, originalPrice: 45.00, discountPercent: 0, maxFreeToppings: 5, available: true }
+    { 
+      id: "size-300", 
+      name: "Copo 300ml", 
+      description: "Perfeito para matar aquela vontade de forma rápida e refrescante.", 
+      price: 14.00, 
+      originalPrice: 14.00, 
+      discountPercent: 0, 
+      maxComplements: 2,
+      maxFruits: 1,
+      maxSyrups: 1,
+      maxFreeToppings: 3, 
+      available: true 
+    },
+    { 
+      id: "size-500", 
+      name: "Copo 500ml", 
+      description: "O queridinho da galera! Equilíbrio ideal entre açaí e acompanhamentos.", 
+      price: 20.00, 
+      originalPrice: 20.00, 
+      discountPercent: 0, 
+      maxComplements: 2,
+      maxFruits: 2,
+      maxSyrups: 1,
+      maxFreeToppings: 4, 
+      available: true 
+    },
+    { 
+      id: "size-700", 
+      name: "Copo 700ml", 
+      description: "Tamanho caprichado para quem ama açaí de verdade.", 
+      price: 25.00, 
+      originalPrice: 25.00, 
+      discountPercent: 0, 
+      maxComplements: 3,
+      maxFruits: 2,
+      maxSyrups: 1,
+      maxFreeToppings: 5, 
+      available: true 
+    },
+    { 
+      id: "size-1000", 
+      name: "Marmita G 1100", 
+      description: "Fartura total de 1100ml para dividir com a galera ou matar a larica!", 
+      price: 35.00, 
+      originalPrice: 35.00, 
+      discountPercent: 0, 
+      maxComplements: 3,
+      maxFruits: 3,
+      maxSyrups: 1,
+      maxFreeToppings: 6, 
+      available: true 
+    }
   ],
   bases: [
     { id: "base-tradicional", name: "Açaí Tradicional Cremoso", available: true },
@@ -70,28 +118,36 @@ const INITIAL_MENU: MenuData = {
     { id: "base-cupuacu", name: "Cupuaçu Puro Cremoso", available: true },
     { id: "base-misto", name: "Meio a Meio (Açaí + Cupuaçu)", available: true }
   ],
-  freeToppings: [
-    { id: "free-ninho", name: "Leite Ninho em Pó", available: true },
-    { id: "free-granola", name: "Granola Crocante", available: true },
-    { id: "free-pacoca", name: "Paçoca de Amendoim", available: true },
-    { id: "free-banana", name: "Banana Fresca Fatiada", available: true },
-    { id: "free-aveia", name: "Aveia em Flocos", available: true },
-    { id: "free-sucrilhos", name: "Sucrilhos de Milho", available: true }
-  ],
-  premiumToppings: [
-    { id: "prem-morango", name: "Morango Fresco Fatiado", price: 4.50, available: true },
-    { id: "prem-nutella", name: "Nutella Pura Original", price: 5.00, available: true },
-    { id: "prem-kitkat", name: "KitKat Picadinho", price: 3.50, available: true },
-    { id: "prem-confete", name: "Confetes de Chocolate", price: 3.00, available: true },
-    { id: "prem-doce-leite", name: "Doce de Leite Cremoso", price: 3.00, available: true },
-    { id: "prem-ninho-extra", name: "Leite Ninho Extra", price: 2.50, available: true },
-    { id: "prem-whey", name: "Dose Whey Protein (30g)", price: 6.00, available: true }
-  ],
   syrups: [
     { id: "syrup-condensado", name: "Leite Condensado", available: true },
     { id: "syrup-chocolate", name: "Calda de Chocolate", available: true },
     { id: "syrup-morango", name: "Calda de Morango", available: true },
-    { id: "syrup-mel", name: "Mel de Abelha Puro", available: true }
+    { id: "syrup-caramelo", name: "Calda de Caramelo", available: true }
+  ],
+  freeToppings: [
+    { id: "free-granola", name: "Granola", available: true },
+    { id: "free-leite-po", name: "Leite em Pó", available: true },
+    { id: "free-sucrilhos", name: "Sucrilhos", available: true },
+    { id: "free-disqueti", name: "Disqueti", available: true },
+    { id: "free-pacoca", name: "Paçoca", available: true },
+    { id: "free-chocoball", name: "Chocoball", available: true },
+    { id: "free-jujuba", name: "Jujuba", available: true },
+    { id: "free-amendoim", name: "Amendoim Triturado", available: true },
+    { id: "fruit-banana", name: "Banana", available: true },
+    { id: "fruit-morango", name: "Morango", available: true },
+    { id: "fruit-kiwi", name: "Kiwi", available: true },
+    { id: "fruit-manga", name: "Manga", available: true },
+    { id: "fruit-uva", name: "Uva", available: true }
+  ],
+  fruits: [
+    { id: "fruit-banana", name: "Banana", available: true },
+    { id: "fruit-morango", name: "Morango", available: true },
+    { id: "fruit-kiwi", name: "Kiwi", available: true },
+    { id: "fruit-manga", name: "Manga", available: true },
+    { id: "fruit-uva", name: "Uva", available: true }
+  ],
+  premiumToppings: [
+    { id: "prem-nutella", name: "Nutella Pura Original", price: 6.00, available: true }
   ]
 };
 
@@ -415,7 +471,7 @@ export default function App() {
       case 'size-700':
         return { text: 'Caprichado 🔥', bg: 'bg-orange-100 text-orange-900 border-orange-200' };
       case 'size-1000':
-        return { text: 'Super Fartura 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
+        return { text: 'Marmita G 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
       default:
         return { text: 'Especial', bg: 'bg-purple-100 text-purple-900 border-purple-200' };
     }
@@ -738,8 +794,11 @@ export default function App() {
                               )}
                             </div>
 
-                            <span className="text-xs font-bold text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-100 dark:border-purple-900/50">
-                              {size.maxFreeToppings} acomp. inclusos
+                            <span className="text-xs font-bold text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/80 px-2.5 py-0.5 rounded-full border border-purple-100 dark:border-purple-900/50">
+                              {(() => {
+                                const limits = getSizeLimits(size);
+                                return `1 Calda • ${limits.maxComplements} Comp. • ${limits.maxFruits} Fruta${limits.maxFruits > 1 ? 's' : ''}`;
+                              })()}
                             </span>
                           </div>
 

@@ -31,3 +31,45 @@ export function getRemainingHoursText(expiresAt?: string): string | null {
 
   return `Resta apenas ${diffMinutes}m!`;
 }
+
+export interface SizeLimits {
+  maxSyrups: number;
+  maxComplements: number;
+  maxFruits: number;
+  maxFreeToppings: number;
+}
+
+export function getSizeLimits(size: SizeItem): SizeLimits {
+  const s = String(size.name || size.id || '').toLowerCase();
+  if (s.includes('300')) {
+    return {
+      maxSyrups: size.maxSyrups ?? 1,
+      maxComplements: size.maxComplements ?? 2,
+      maxFruits: size.maxFruits ?? 1,
+      maxFreeToppings: size.maxFreeToppings ?? 3
+    };
+  }
+  if (s.includes('500')) {
+    return {
+      maxSyrups: size.maxSyrups ?? 1,
+      maxComplements: size.maxComplements ?? 2,
+      maxFruits: size.maxFruits ?? 2,
+      maxFreeToppings: size.maxFreeToppings ?? 4
+    };
+  }
+  if (s.includes('700')) {
+    return {
+      maxSyrups: size.maxSyrups ?? 1,
+      maxComplements: size.maxComplements ?? 3,
+      maxFruits: size.maxFruits ?? 2,
+      maxFreeToppings: size.maxFreeToppings ?? 5
+    };
+  }
+  // Marmita G 1100 / ExtraGrande / Barca
+  return {
+    maxSyrups: size.maxSyrups ?? 1,
+    maxComplements: size.maxComplements ?? 3,
+    maxFruits: size.maxFruits ?? 3,
+    maxFreeToppings: size.maxFreeToppings ?? 6
+  };
+}

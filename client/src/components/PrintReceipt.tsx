@@ -84,14 +84,17 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
                   <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
                 </div>
                 <p>• Base: {item.base.name}</p>
+                {item.syrups.length > 0 && (
+                  <p>• Calda: {item.syrups.map(s => s.name).join(', ')}</p>
+                )}
                 {item.freeToppings.length > 0 && (
-                  <p>• Acomp: {item.freeToppings.map(t => t.name).join(', ')}</p>
+                  <p>• Comp: {item.freeToppings.filter(t => !t.id?.startsWith('fruit-')).map(t => t.name).join(', ')}</p>
+                )}
+                {((item.fruits && item.fruits.length > 0) || (item.freeToppings && item.freeToppings.some(t => t.id?.startsWith('fruit-')))) && (
+                  <p>• Frutas: {((item.fruits && item.fruits.length > 0) ? item.fruits : item.freeToppings.filter(t => t.id?.startsWith('fruit-'))).map(f => f.name).join(', ')}</p>
                 )}
                 {item.premiumToppings.length > 0 && (
                   <p>• Extras: {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}</p>
-                )}
-                {item.syrups.length > 0 && (
-                  <p>• Caldas: {item.syrups.map(s => s.name).join(', ')}</p>
                 )}
                 {item.notes && <p className="font-bold italic">Obs: {item.notes}</p>}
               </div>

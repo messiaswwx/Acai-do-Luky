@@ -404,10 +404,17 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
       id: item.id,
       size: { id: item.size?.id },
       base: { id: item.base?.id },
-      freeToppings: (item.freeToppings || []).map(t => ({ id: t.id })),
+      freeToppings: [
+        ...(item.freeToppings || []),
+        ...(item.fruits || [])
+      ].map(t => ({ id: t.id })),
+      fruits: (item.fruits || []).map(f => ({ id: f.id })),
       premiumToppings: (item.premiumToppings || []).map(p => ({ item: { id: p.item?.id }, quantity: p.quantity })),
       syrups: (item.syrups || []).map(s => ({ id: s.id })),
-      notes: item.notes,
+      notes: [
+        item.fruits && item.fruits.length > 0 ? `[Frutas: ${item.fruits.map(f => f.name).join(', ')}]` : '',
+        item.notes || ''
+      ].filter(Boolean).join(' - '),
       quantity: item.quantity
     }))
   };

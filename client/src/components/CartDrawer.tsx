@@ -75,10 +75,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                 {/* Toppings Details */}
                 <div className="text-xs text-slate-600 dark:text-slate-300 space-y-0.5 bg-slate-50 dark:bg-slate-900/90 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                  {item.syrups.length > 0 && (
+                    <p>
+                      <span className="font-bold text-purple-700 dark:text-purple-400">Calda:</span>{' '}
+                      {item.syrups.map(s => s.name).join(', ')}
+                    </p>
+                  )}
                   {item.freeToppings.length > 0 && (
                     <p>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">Acompanhamentos:</span>{' '}
+                      <span className="font-bold text-slate-700 dark:text-slate-300">Complementos:</span>{' '}
                       {item.freeToppings.map(t => t.name).join(', ')}
+                    </p>
+                  )}
+                  {item.fruits && item.fruits.length > 0 && (
+                    <p>
+                      <span className="font-bold text-rose-700 dark:text-rose-400">Frutas:</span>{' '}
+                      {item.fruits.map(f => f.name).join(', ')}
                     </p>
                   )}
                   {item.premiumToppings.length > 0 && (
@@ -87,12 +99,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       {item.premiumToppings
                         .map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`)
                         .join(', ')}
-                    </p>
-                  )}
-                  {item.syrups.length > 0 && (
-                    <p>
-                      <span className="font-bold text-purple-700 dark:text-purple-400">Caldas:</span>{' '}
-                      {item.syrups.map(s => s.name).join(', ')}
                     </p>
                   )}
                   {item.notes && (

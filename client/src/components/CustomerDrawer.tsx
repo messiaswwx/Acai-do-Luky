@@ -718,7 +718,12 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                                   )}
                                   {item.freeToppings && item.freeToppings.length > 0 && (
                                     <span className="text-slate-500 block text-[10px]">
-                                      Acomp: {item.freeToppings.map(t => t.name).join(', ')}
+                                      Comp: {item.freeToppings.filter(t => !t.id?.startsWith('fruit-')).map(t => t.name).join(', ')}
+                                    </span>
+                                  )}
+                                  {((item.fruits && item.fruits.length > 0) || (item.freeToppings && item.freeToppings.some(t => t.id?.startsWith('fruit-')))) && (
+                                    <span className="text-rose-600 dark:text-rose-400 block text-[10px]">
+                                      Frutas: {((item.fruits && item.fruits.length > 0) ? item.fruits : item.freeToppings.filter(t => t.id?.startsWith('fruit-'))).map(f => f.name).join(', ')}
                                     </span>
                                   )}
                                 </div>

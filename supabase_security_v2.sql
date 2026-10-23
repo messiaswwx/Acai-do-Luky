@@ -332,7 +332,7 @@ BEGIN
     IF s LIKE '%300%' THEN RETURN 'est-copo-300'; END IF;
     IF s LIKE '%500%' THEN RETURN 'est-copo-500'; END IF;
     IF s LIKE '%700%' THEN RETURN 'est-copo-700'; END IF;
-    IF s LIKE '%1000%' OR s LIKE '%litro%' OR s LIKE '%barca%' THEN RETURN 'est-copo-1000'; END IF;
+    IF s LIKE '%1000%' OR s LIKE '%1100%' OR s LIKE '%litro%' OR s LIKE '%barca%' OR s LIKE '%marmita%' THEN RETURN 'est-copo-1000'; END IF;
   END LOOP;
   RETURN NULL;
 END;
@@ -789,7 +789,7 @@ DECLARE
   v_item JSONB;
   v_items_out JSONB := '[]'::jsonb;
   v_size JSONB; v_base JSONB; v_tmp JSONB; v_found JSONB;
-  v_free JSONB; v_prem JSONB; v_syrups JSONB;
+  v_free JSONB; v_fruits JSONB; v_prem JSONB; v_syrups JSONB;
   v_qty INT; v_pq INT;
   v_unit NUMERIC; v_promo BOOLEAN; v_exp TIMESTAMPTZ;
   v_subtotal NUMERIC := 0;
@@ -898,6 +898,18 @@ BEGIN
       RETURN jsonb_build_object('success', false, 'error', 'Caldas demais em um item.');
     END IF;
 
+    -- Frutas
+    v_fruits := '[]'::jsonb;
+    IF jsonb_typeof(v_item -> 'fruits') = 'array' THEN
+      FOR v_tmp IN SELECT * FROM jsonb_array_elements(v_item -> 'fruits') LOOP
+        SELECT e INTO v_found FROM jsonb_array_elements(COALESCE(v_menu -> 'fruits', '[]'::jsonb)) e
+        WHERE e ->> 'id' = v_tmp ->> 'id' AND COALESCE((e ->> 'available')::BOOLEAN, true) LIMIT 1;
+        IF v_found IS NOT NULL THEN
+          v_fruits := v_fruits || jsonb_build_array(v_found);
+        END IF;
+      END LOOP;
+    END IF;
+
     -- Preço do tamanho (com promoção válida apenas se não expirou)
     v_exp := public._safe_timestamptz(v_size ->> 'discountExpiresAt');
     v_promo := COALESCE(public._safe_numeric(v_size ->> 'discountPercent'), 0) > 0
@@ -936,6 +948,7 @@ BEGIN
       'size', v_size,
       'base', v_base,
       'freeToppings', v_free,
+      'fruits', v_fruits,
       'premiumToppings', v_prem,
       'syrups', v_syrups,
       'notes', COALESCE(public._clean_text(v_item ->> 'notes', 300), ''),

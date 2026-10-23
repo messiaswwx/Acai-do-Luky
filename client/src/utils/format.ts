@@ -45,16 +45,28 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
       const baseName = item?.base?.name || (typeof item?.base === 'string' ? item.base : 'Tradicional');
       const unitPrice = Number(item?.unitPrice) || 0;
       const quantity = Number(item?.quantity) || 1;
-      const freeToppings = Array.isArray(item?.freeToppings) ? item.freeToppings : [];
       const premiumToppings = Array.isArray(item?.premiumToppings) ? item.premiumToppings : [];
       const syrups = Array.isArray(item?.syrups) ? item.syrups : [];
+      const rawFree = Array.isArray(item?.freeToppings) ? item.freeToppings : [];
+      const complements = rawFree.filter((t: any) => !String(t?.id || '').startsWith('fruit-'));
+      const fruits = (Array.isArray(item?.fruits) && item.fruits.length > 0)
+        ? item.fruits
+        : rawFree.filter((t: any) => String(t?.id || '').startsWith('fruit-'));
 
       lines.push(`---------------------------`);
       lines.push(`*${quantity}x ${sizeName}* (${formatCurrency(unitPrice * quantity)})`);
       lines.push(`• *Base:* ${baseName}`);
       
-      if (freeToppings.length > 0) {
-        lines.push(`• *Acompanhamentos:* ${freeToppings.map((t: any) => t?.name || t).filter(Boolean).join(', ')}`);
+      if (syrups.length > 0) {
+        lines.push(`• *Calda:* ${syrups.map((s: any) => s?.name || s).filter(Boolean).join(', ')}`);
+      }
+
+      if (complements.length > 0) {
+        lines.push(`• *Complementos:* ${complements.map((t: any) => t?.name || t).filter(Boolean).join(', ')}`);
+      }
+
+      if (fruits.length > 0) {
+        lines.push(`• *Frutas:* ${fruits.map((f: any) => f?.name || f).filter(Boolean).join(', ')}`);
       }
       
       if (premiumToppings.length > 0) {
@@ -63,10 +75,6 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
           const pQty = p?.quantity > 1 ? `${p.quantity}x ` : '';
           return `${pQty}${pName}`;
         }).filter(Boolean).join(', ')}`);
-      }
-      
-      if (syrups.length > 0) {
-        lines.push(`• *Caldas:* ${syrups.map((s: any) => s?.name || s).filter(Boolean).join(', ')}`);
       }
       
       if (item?.notes) {

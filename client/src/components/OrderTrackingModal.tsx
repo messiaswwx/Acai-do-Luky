@@ -415,7 +415,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 items.map((item, idx) => {
                   const sizeName = item?.size?.name || (typeof item?.size === 'string' ? item.size : 'Açaí');
                   const baseName = item?.base?.name || (typeof item?.base === 'string' ? item.base : null);
-                  const freeToppings = Array.isArray(item?.freeToppings) ? item.freeToppings : [];
+                  const rawFree = Array.isArray(item?.freeToppings) ? item.freeToppings : [];
+                  const freeToppings = rawFree.filter((t: any) => !String(t?.id || '').startsWith('fruit-'));
+                  const fruits = Array.isArray(item?.fruits) && item.fruits.length > 0
+                    ? item.fruits
+                    : rawFree.filter((t: any) => String(t?.id || '').startsWith('fruit-'));
                   const premiumToppings = Array.isArray(item?.premiumToppings) ? item.premiumToppings : [];
                   const syrups = Array.isArray(item?.syrups) ? item.syrups : [];
                   const unitPrice = Number(item?.unitPrice) || 0;
@@ -430,9 +434,19 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                       {baseName && (
                         <p className="text-purple-700 dark:text-purple-300 font-semibold text-[11px]">Base: {baseName}</p>
                       )}
+                      {syrups.length > 0 && (
+                        <p className="text-purple-700 dark:text-purple-300 text-[11px]">
+                          Calda: {syrups.map((s: any) => s?.name || s).filter(Boolean).join(', ')}
+                        </p>
+                      )}
                       {freeToppings.length > 0 && (
                         <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-                          Grátis: {freeToppings.map((t: any) => t?.name || t).filter(Boolean).join(', ')}
+                          Complementos: {freeToppings.map((t: any) => t?.name || t).filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                      {fruits.length > 0 && (
+                        <p className="text-rose-600 dark:text-rose-400 text-[11px]">
+                          Frutas: {fruits.map((f: any) => f?.name || f).filter(Boolean).join(', ')}
                         </p>
                       )}
                       {premiumToppings.length > 0 && (
@@ -442,11 +456,6 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                             const pQty = p?.quantity > 1 ? `${p.quantity}x ` : '';
                             return `${pQty}${pName}`;
                           }).filter(Boolean).join(', ')}
-                        </p>
-                      )}
-                      {syrups.length > 0 && (
-                        <p className="text-purple-700 dark:text-purple-300 text-[11px]">
-                          Caldas: {syrups.map((s: any) => s?.name || s).filter(Boolean).join(', ')}
                         </p>
                       )}
                       {item?.notes && (
