@@ -41,7 +41,11 @@ import {
   Flame, 
   ShoppingBag,
   XCircle,
-  User
+  User,
+  X,
+  ArrowRight,
+  Search,
+  RefreshCw
 } from 'lucide-react';
 
 const INITIAL_SETTINGS: StoreSettings = {
@@ -236,8 +240,23 @@ export default function App() {
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+  const [activeOrder, setActiveOrder] = useState<Order | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('luky_cached_active_order');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+  const [isSearchOrderOpen, setIsSearchOrderOpen] = useState(false);
+  const [searchOrderCode, setSearchOrderCode] = useState('');
+  const [searchOrderLoading, setSearchOrderLoading] = useState(false);
+  const [searchOrderError, setSearchOrderError] = useState('');
   const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -295,28 +314,46 @@ export default function App() {
 
   // Restore active order from localStorage if exists
   useEffect(() => {
-    const savedOrderId = localStorage.getItem('luky_active_order_id');
+    let savedOrderId: string | null = null;
+    try {
+      savedOrderId = localStorage.getItem('luky_active_order_id');
+    } catch {}
+
     if (savedOrderId) {
-      if (isSupabaseConfigured) {
-        fetchOrderById(savedOrderId).then(order => {
-          if (order) {
-            setActiveOrder(order);
-            if (order.status !== 'CONCLUIDO') {
-              setIsTrackingModalOpen(true);
-            }
+      const applyOrder = (order: Order | null) => {
+        if (order) {
+          setActiveOrder(order);
+          try {
+            localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+          } catch {}
+          if (order.status !== 'CONCLUIDO') {
+            setIsTrackingModalOpen(true);
           }
-        });
+        }
+      };
+
+      if (isSupabaseConfigured) {
+        fetchOrderById(savedOrderId)
+          .then(order => {
+            if (order) {
+              applyOrder(order);
+            } else {
+              fetch(`/api/orders/${savedOrderId}`)
+                .then(res => res.ok ? res.json() : null)
+                .then(applyOrder)
+                .catch(() => {});
+            }
+          })
+          .catch(() => {
+            fetch(`/api/orders/${savedOrderId}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(applyOrder)
+              .catch(() => {});
+          });
       } else {
         fetch(`/api/orders/${savedOrderId}`)
           .then(res => res.ok ? res.json() : null)
-          .then(order => {
-            if (order) {
-              setActiveOrder(order);
-              if (order.status !== 'CONCLUIDO') {
-                setIsTrackingModalOpen(true);
-              }
-            }
-          })
+          .then(applyOrder)
           .catch(() => {});
       }
     }
@@ -475,7 +512,10 @@ export default function App() {
 
   const handleTrackCustomerOrder = useCallback((order: Order) => {
     setActiveOrder(order);
-    localStorage.setItem('luky_active_order_id', order.id);
+    try {
+      localStorage.setItem('luky_active_order_id', order.id);
+      localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+    } catch {}
     setIsTrackingModalOpen(true);
   }, []);
 
@@ -483,6 +523,8 @@ export default function App() {
     setCartItems([]);
     try {
       localStorage.removeItem('luky_cart_items');
+      localStorage.setItem('luky_active_order_id', order.id);
+      localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
     } catch {
       // ignore
     }
@@ -490,7 +532,6 @@ export default function App() {
     setIsCartOpen(false);
     setActiveOrder(order);
     setIsTrackingModalOpen(true);
-    localStorage.setItem('luky_active_order_id', order.id);
   }, []);
 
   const handleCloseTracking = useCallback(() => {
@@ -500,6 +541,7 @@ export default function App() {
   const handleNewOrder = useCallback(() => {
     try {
       localStorage.removeItem('luky_active_order_id');
+      localStorage.removeItem('luky_cached_active_order');
       localStorage.removeItem('luky_cart_items');
     } catch {
       // ignore
@@ -508,6 +550,40 @@ export default function App() {
     setIsTrackingModalOpen(false);
     setCartItems([]);
   }, []);
+
+  const handleSearchOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchOrderCode.trim();
+    if (!q) return;
+    setSearchOrderLoading(true);
+    setSearchOrderError('');
+    try {
+      let order: Order | null = null;
+      if (isSupabaseConfigured) {
+        order = await fetchOrderById(q);
+      }
+      if (!order) {
+        const res = await fetch(`/api/orders/${q}`);
+        if (res.ok) order = await res.json();
+      }
+      if (order) {
+        setActiveOrder(order);
+        try {
+          localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+          localStorage.setItem('luky_active_order_id', order.id);
+        } catch {}
+        setIsSearchOrderOpen(false);
+        setIsTrackingModalOpen(true);
+        setSearchOrderCode('');
+      } else {
+        setSearchOrderError('Pedido não localizado. Verifique se digitou o código completo (ex: PED-12345).');
+      }
+    } catch {
+      setSearchOrderError('Erro ao consultar pedido. Tente novamente.');
+    } finally {
+      setSearchOrderLoading(false);
+    }
+  };
 
   // Observa expiração de sessão do admin
   useEffect(() => {
@@ -534,7 +610,10 @@ export default function App() {
     return cartItems.reduce((acc, i) => acc + (Number(i?.unitPrice) || 0) * (Number(i?.quantity) || 1), 0);
   }, [cartItems]);
 
-  const getSizeBadge = (sizeId: string) => {
+  const getSizeBadge = (sizeId: string, sizeName?: string) => {
+    if (sizeId === 'size-1000' || (sizeName && (sizeName.includes('1,1L') || sizeName.includes('1000') || sizeName.toLowerCase().includes('marmita')))) {
+      return { text: 'Fartura 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
+    }
     switch (sizeId) {
       case 'size-300':
         return { text: 'Pausa Rápida ⚡', bg: 'bg-purple-100 text-purple-900 border-purple-200' };
@@ -543,9 +622,9 @@ export default function App() {
       case 'size-700':
         return { text: 'Caprichado 🔥', bg: 'bg-orange-100 text-orange-900 border-orange-200' };
       case 'size-1000':
-        return { text: 'Marmita G 1,1L 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
+        return { text: 'Fartura 🏆', bg: 'bg-emerald-100 text-emerald-900 border-emerald-200' };
       default:
-        return { text: 'Especial', bg: 'bg-purple-100 text-purple-900 border-purple-200' };
+        return { text: 'Especial ✨', bg: 'bg-purple-100 text-purple-900 border-purple-200' };
     }
   };
 
@@ -580,29 +659,41 @@ export default function App() {
                     {/* Botão de Tema Escuro / Claro */}
                     <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
 
-                    {/* Botão para rastrear pedido ativo caso o cliente já tenha feito um */}
-                    {activeOrder && (
-                      <button
-                        onClick={() => setIsTrackingModalOpen(true)}
-                        className={`px-3 py-1 rounded-full text-xs font-black shadow-xs flex items-center gap-1.5 cursor-pointer transition-all ${
-                          activeOrder.status === 'CANCELADO'
-                            ? 'bg-red-500 text-white animate-bounce ring-2 ring-red-300'
-                            : 'bg-amber-400 text-purple-950 animate-pulse'
-                        }`}
-                      >
-                        {activeOrder.status === 'CANCELADO' ? (
-                          <>
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Pedido Não Aceito (Ver Aviso)</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Acompanhar Pedido</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    {/* Botão permanente para acompanhar pedido ativo ou consultar status */}
+                    <button
+                      onClick={() => {
+                        if (activeOrder) {
+                          setIsTrackingModalOpen(true);
+                        } else {
+                          setIsSearchOrderOpen(true);
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-black shadow-xs flex items-center gap-1.5 cursor-pointer transition-all ${
+                        activeOrder?.status === 'CANCELADO'
+                          ? 'bg-red-500 text-white animate-bounce ring-2 ring-red-300'
+                          : activeOrder
+                          ? 'bg-amber-400 text-purple-950 animate-pulse'
+                          : 'bg-white/10 hover:bg-white/20 text-white border border-white/15'
+                      }`}
+                      title={activeOrder ? 'Acompanhar pedido em andamento' : 'Rastrear status de um pedido'}
+                    >
+                      {activeOrder?.status === 'CANCELADO' ? (
+                        <>
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Pedido Não Aceito (Ver Aviso)</span>
+                        </>
+                      ) : activeOrder ? (
+                        <>
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Acompanhar Pedido</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Rastrear Pedido</span>
+                        </>
+                      )}
+                    </button>
 
                     {/* Botão de Conta / Perfil do Cliente */}
                     <button
@@ -823,7 +914,7 @@ export default function App() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {(Array.isArray(menu?.sizes) && menu.sizes.length > 0 ? menu.sizes : INITIAL_MENU.sizes).map(size => {
-                      const badge = getSizeBadge(size.id);
+                      const badge = getSizeBadge(size.id, size.name);
                       const isTopSeller = size.id === 'size-500';
                       const basePrice = size.originalPrice ?? size.price;
                       const isPromo = isDiscountActive(size);
@@ -954,7 +1045,30 @@ export default function App() {
                 </div>
 
                 {/* Footer */}
-                <footer className="pt-8 pb-4 text-center border-t border-purple-200/60 dark:border-purple-900/40">
+                <footer className="pt-8 pb-10 text-center border-t border-purple-200/60 dark:border-purple-900/40 space-y-3">
+                  <div className="flex items-center justify-center gap-4 text-xs font-semibold flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeOrder) {
+                          setIsTrackingModalOpen(true);
+                        } else {
+                          setIsSearchOrderOpen(true);
+                        }
+                      }}
+                      className="text-purple-700 dark:text-purple-300 hover:text-purple-950 dark:hover:text-white flex items-center gap-1.5 cursor-pointer bg-purple-50 dark:bg-purple-950/60 px-3 py-1.5 rounded-full border border-purple-200/60 dark:border-purple-800/40 transition-colors"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{activeOrder ? 'Acompanhar Pedido em Andamento' : 'Rastrear Meu Pedido'}</span>
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+                    <a
+                      href="/admin"
+                      className="text-slate-500 dark:text-slate-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors text-xs py-1.5"
+                    >
+                      Área do Lojista (Painel de Pedidos)
+                    </a>
+                  </div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                     © {new Date().getFullYear()} {settings.storeName} - Todos os direitos reservados.
                   </p>
@@ -1059,6 +1173,92 @@ export default function App() {
                 onReorder={handleReorder}
                 onTrackOrder={handleTrackCustomerOrder}
               />
+
+              {/* Modal de Busca / Rastreamento Rápido de Pedido */}
+              {isSearchOrderOpen && (
+                <div 
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) setIsSearchOrderOpen(false);
+                  }}
+                  className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+                >
+                  <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-purple-100 dark:border-slate-800 space-y-4 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-amber-400/20 text-amber-500 flex items-center justify-center">
+                          <Search className="w-4 h-4" />
+                        </div>
+                        <h3 className="font-black text-slate-900 dark:text-white text-base">Rastrear Pedido</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSearchOrderOpen(false);
+                          setSearchOrderError('');
+                        }}
+                        className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Fechar"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Digite o código do seu pedido (ex: <span className="font-mono font-bold text-purple-700 dark:text-purple-300">PED-12345</span>) para acompanhar o preparo e a entrega em tempo real.
+                    </p>
+
+                    <form onSubmit={handleSearchOrder} className="space-y-3">
+                      <div>
+                        <input
+                          type="text"
+                          value={searchOrderCode}
+                          onChange={e => setSearchOrderCode(e.target.value)}
+                          placeholder="Ex: PED-12345"
+                          className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider focus:outline-hidden focus:ring-2 focus:ring-purple-600"
+                          autoFocus
+                        />
+                      </div>
+
+                      {searchOrderError && (
+                        <p className="text-xs text-red-500 font-semibold bg-red-50 dark:bg-red-950/40 p-2.5 rounded-xl border border-red-200 dark:border-red-900/60">
+                          {searchOrderError}
+                        </p>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={searchOrderLoading || !searchOrderCode.trim()}
+                        className="w-full py-3 bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-900 hover:to-indigo-950 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50 transition-all"
+                      >
+                        {searchOrderLoading ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
+                            <span>Buscando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Consultar Status</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSearchOrderOpen(false);
+                          setIsCustomerDrawerOpen(true);
+                        }}
+                        className="text-xs font-bold text-purple-700 dark:text-purple-300 hover:underline cursor-pointer"
+                      >
+                        Ver histórico de pedidos na minha conta
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           }
         />
