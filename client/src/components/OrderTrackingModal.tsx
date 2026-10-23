@@ -498,6 +498,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                           <p className="text-slate-400 italic text-[10px]">Obs: {cleanItemNotes}</p>
                         ) : null;
                       })()}
+                      <div className="pt-0.5">
+                        {item?.needSpoon === false ? (
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                            🍃 Sem colher
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                            🥄 Com colher
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -506,6 +517,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
             {/* Totais do Pedido */}
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Colher descartável:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {order?.needCutlery === false ? '🍃 Não precisa de colher' : '🥄 Enviar colher'}
+                </span>
+              </div>
               <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Subtotal dos itens:</span>
                 <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatCurrency(order?.subtotal || 0)}</span>

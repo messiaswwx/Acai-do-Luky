@@ -363,6 +363,7 @@ export function parseOrderRow(row: any): Order {
     deliveryFee: Number(row.delivery_fee) || 0,
     total: Number(row.total) || 0,
     notes: cleanNotes || undefined,
+    needCutlery: row.need_cutlery ?? (rawNotes.includes('SEM COLHER') ? false : true),
     cancellationReason
   };
 }
@@ -435,6 +436,7 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
       premiumToppings: (item.premiumToppings || []).map(p => ({ item: { id: p.item?.id }, quantity: p.quantity })),
       syrups: (item.syrups || []).map(s => ({ id: s.id })),
       notes: (item.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim(),
+      needSpoon: item.needSpoon !== false,
       quantity: item.quantity
     }))
   };

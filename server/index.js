@@ -624,6 +624,7 @@ app.post('/api/orders', (req, res) => {
     subtotal: Number(subtotalCalculado.toFixed(2)),
     deliveryFee,
     total,
+    needCutlery: body.needCutlery !== false,
     notes: String(body.notes || '').slice(0, 300)
   };
 

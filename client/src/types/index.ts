@@ -80,6 +80,7 @@ export interface CartItem {
   notes: string;
   unitPrice: number;
   quantity: number;
+  needSpoon?: boolean;
 }
 
 export type OrderStatus = 'NOVO' | 'PREPARANDO' | 'A_CAMINHO' | 'CONCLUIDO' | 'CANCELADO';
@@ -113,6 +114,7 @@ export interface Order {
   deliveryFee: number;
   total: number;
   notes?: string;
+  needCutlery?: boolean;
   cancellationReason?: string;
 }
 

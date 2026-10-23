@@ -77,6 +77,8 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
         }).filter(Boolean).join(', ')}`);
       }
       
+      lines.push(`• *Colher:* ${item?.needSpoon === false ? '🍃 Sem colher' : '🥄 Com colher'}`);
+      
       const cleanItemNotes = (item?.notes || '').replace(/\[Frutas:[^\]]*\]\s*-?\s*/gi, '').trim();
       if (cleanItemNotes) {
         lines.push(`• *Obs:* ${cleanItemNotes}`);
@@ -84,6 +86,7 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
     });
 
     lines.push(`---------------------------`);
+    lines.push(`🥄 *Colheres Descartáveis:* ${order?.needCutlery === false ? '🍃 Sem colher' : '🥄 Com colher'}`);
     lines.push(`💵 *Subtotal:* ${formatCurrency(order?.subtotal || 0)}`);
     if (order?.orderType === 'ENTREGA') {
       lines.push(`🛵 *Taxa de Entrega:* ${formatCurrency(order?.deliveryFee || 0)}`);

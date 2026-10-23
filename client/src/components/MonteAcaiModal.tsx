@@ -22,7 +22,8 @@ import {
   Droplets, 
   Apple, 
   Cookie, 
-  MessageSquare
+  MessageSquare,
+  Utensils
 } from 'lucide-react';
 
 interface MonteAcaiModalProps {
@@ -115,6 +116,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
   const [selectedComplements, setSelectedComplements] = useState<FreeToppingItem[]>([]);
   const [selectedFruits, setSelectedFruits] = useState<FruitItem[]>([]);
   const [premiumToppingCounts, setPremiumToppingCounts] = useState<{ [id: string]: number }>({});
+  const [needSpoon, setNeedSpoon] = useState(true);
   const [notes, setNotes] = useState('');
 
   // 2. Caldas: Limite de 1 calda (troca automática ou desmarcação)
@@ -196,12 +198,13 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
       syrups: selectedSyrups,
       notes: notes.trim(),
       unitPrice,
-      quantity: 1
+      quantity: 1,
+      needSpoon
     };
 
     onAddToCart(cartItem);
     onClose();
-  }, [size, selectedBase, selectedComplements, selectedFruits, premiumToppingCounts, selectedSyrups, notes, unitPrice, premiumList, onAddToCart, onClose]);
+  }, [size, selectedBase, selectedComplements, selectedFruits, premiumToppingCounts, selectedSyrups, notes, unitPrice, needSpoon, premiumList, onAddToCart, onClose]);
 
   const remainingTime = useMemo(
     () => isPromo ? getRemainingHoursText(size.discountExpiresAt) : null,
@@ -533,7 +536,53 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
           </div>
 
           {/* ========================================================= */}
-          {/* 6. OBSERVAÇÕES                                            */}
+          {/* 6. COLHER DESCARTÁVEL                                     */}
+          {/* ========================================================= */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="bg-purple-900 text-amber-300 text-xs w-6 h-6 rounded-full flex items-center justify-center font-black">6</span>
+                <span className="flex items-center gap-1.5">
+                  <Utensils className="w-4 h-4 text-purple-700 dark:text-purple-400" />
+                  <span>Precisa de colher descartável?</span>
+                </span>
+              </h3>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                Grátis
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setNeedSpoon(true)}
+                className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  needSpoon
+                    ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-xs ring-1 ring-purple-600/30'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:border-slate-300'
+                }`}
+              >
+                <span>🥄 Com colher</span>
+                {needSpoon && <Check className="w-4 h-4 text-purple-700 dark:text-purple-400 stroke-[3]" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNeedSpoon(false)}
+                className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  !needSpoon
+                    ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-950 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-600/30'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:border-slate-300'
+                }`}
+              >
+                <span>🍃 Sem colher</span>
+                {!needSpoon && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ========================================================= */}
+          {/* 7. OBSERVAÇÕES                                            */}
           {/* ========================================================= */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
@@ -542,7 +591,7 @@ export const MonteAcaiModal: React.FC<MonteAcaiModalProps> = ({ size, menu, onCl
             </label>
             <input
               type="text"
-              placeholder="Ex: Calda no fundo, capricha no leite em pó, sem colher..."
+              placeholder="Ex: Calda no fundo, capricha no leite em pó..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
               className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-hidden focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-colors"

@@ -734,6 +734,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                         {order.orderType === 'ENTREGA' ? '🛵 Entrega' : '🏪 Retirada'}
                       </span>
+
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        order.needCutlery === false || (order.notes && order.notes.includes('SEM COLHER'))
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                          : 'bg-purple-100 text-purple-900 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+                      }`}>
+                        {order.needCutlery === false || (order.notes && order.notes.includes('SEM COLHER')) ? '🍃 Sem colher' : '🥄 Com colher'}
+                      </span>
                     </div>
                   </div>
 
@@ -794,6 +802,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </p>
                               ) : null;
                             })()}
+                            <div className="pt-1">
+                              {item.needSpoon === false ? (
+                                <span className="inline-block text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                  🍃 Sem colher
+                                </span>
+                              ) : (
+                                <span className="inline-block text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                  🥄 Com colher
+                                </span>
+                              )}
+                            </div>
                           </div>
                         );
                       })}

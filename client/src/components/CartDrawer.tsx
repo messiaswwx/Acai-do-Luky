@@ -106,6 +106,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       "{item.notes}"
                     </p>
                   )}
+                  <div className="pt-1 flex items-center gap-1.5">
+                    {item.needSpoon === false ? (
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                        🍃 Sem colher
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                        🥄 Com colher
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Controls */}
