@@ -114,7 +114,6 @@ const INITIAL_MENU: MenuData = {
   ],
   bases: [
     { id: "base-tradicional", name: "Açaí Tradicional Cremoso", available: true },
-    { id: "base-banana", name: "Açaí Batido com Banana", available: true },
     { id: "base-cupuacu", name: "Cupuaçu Puro Cremoso", available: true },
     { id: "base-misto", name: "Casadinho (Açaí e Cupuaçu)", available: true }
   ],
