@@ -66,10 +66,11 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
     pin: '',
     street: '',
     number: '',
-    neighborhood: '',
     complement: '',
     reference: ''
   });
+  const [registerNeighborhoodOption, setRegisterNeighborhoodOption] = useState('');
+  const [registerCustomNeighborhood, setRegisterCustomNeighborhood] = useState('');
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerError, setRegisterError] = useState('');
 
@@ -79,10 +80,11 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
     phone: '',
     street: '',
     number: '',
-    neighborhood: '',
     complement: '',
     reference: ''
   });
+  const [editNeighborhoodOption, setEditNeighborhoodOption] = useState('');
+  const [editCustomNeighborhood, setEditCustomNeighborhood] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState(false);
   const [profileError, setProfileError] = useState('');
@@ -99,10 +101,23 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
         phone: formatPhone(customer.phone || ''),
         street: customer.address?.street || '',
         number: customer.address?.number || '',
-        neighborhood: customer.address?.neighborhood || '',
         complement: customer.address?.complement || '',
         reference: customer.address?.reference || ''
       });
+
+      const initialNeighborhood = customer.address?.neighborhood || '';
+      const match = PRAIA_GRANDE_NEIGHBORHOODS.find(n => n.name.toLowerCase() === initialNeighborhood.trim().toLowerCase());
+      if (!initialNeighborhood) {
+        setEditNeighborhoodOption('');
+        setEditCustomNeighborhood('');
+      } else if (match) {
+        setEditNeighborhoodOption(match.name);
+        setEditCustomNeighborhood('');
+      } else {
+        setEditNeighborhoodOption('Outros');
+        setEditCustomNeighborhood(initialNeighborhood);
+      }
+
       loadOrders(customer.phone);
     } else {
       setOrders([]);
@@ -196,13 +211,17 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
     setRegisterLoading(true);
     try {
+      const effectiveRegisterNeighborhood = registerNeighborhoodOption === 'Outros'
+        ? registerCustomNeighborhood.trim()
+        : registerNeighborhoodOption.trim();
+
       const res = await createCustomer({
         name: registerForm.name.trim(),
         phone: clean,
         address: registerForm.street.trim() ? {
           street: registerForm.street.trim(),
           number: registerForm.number.trim(),
-          neighborhood: registerForm.neighborhood.trim(),
+          neighborhood: effectiveRegisterNeighborhood || '',
           complement: registerForm.complement.trim() || undefined,
           reference: registerForm.reference.trim() || undefined
         } : undefined
@@ -223,10 +242,11 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
         pin: '',
         street: '',
         number: '',
-        neighborhood: '',
         complement: '',
         reference: ''
       });
+      setRegisterNeighborhoodOption('');
+      setRegisterCustomNeighborhood('');
     } catch {
       setRegisterError('Erro ao salvar cadastro. Verifique a conexão.');
     } finally {
@@ -253,13 +273,17 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
 
     setProfileSaving(true);
     try {
+      const effectiveEditNeighborhood = editNeighborhoodOption === 'Outros'
+        ? editCustomNeighborhood.trim()
+        : editNeighborhoodOption.trim();
+
       const res = await updateCustomer(customer.id, {
         name: editForm.name.trim(),
         phone: cleanPhone,
         address: {
           street: editForm.street.trim(),
           number: editForm.number.trim(),
-          neighborhood: editForm.neighborhood.trim(),
+          neighborhood: effectiveEditNeighborhood || '',
           complement: editForm.complement.trim() || undefined,
           reference: editForm.reference.trim() || undefined
         }
@@ -553,8 +577,8 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Bairro</label>
                         <select
-                          value={registerForm.neighborhood}
-                          onChange={e => setRegisterForm({ ...registerForm, neighborhood: e.target.value })}
+                          value={registerNeighborhoodOption}
+                          onChange={e => setRegisterNeighborhoodOption(e.target.value)}
                           className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                         >
                           <option value="">Selecione...</option>
@@ -563,6 +587,15 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                           ))}
                           <option value="Outros">Outros</option>
                         </select>
+                        {registerNeighborhoodOption === 'Outros' && (
+                          <input
+                            type="text"
+                            placeholder="Digite seu bairro..."
+                            value={registerCustomNeighborhood}
+                            onChange={e => setRegisterCustomNeighborhood(e.target.value)}
+                            className="w-full text-xs font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-slate-800 text-slate-900 dark:text-white mt-2 focus:ring-2 focus:ring-purple-600 focus:outline-hidden animate-in fade-in duration-150"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Complemento</label>
@@ -873,8 +906,8 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Bairro</label>
                         <select
-                          value={editForm.neighborhood}
-                          onChange={e => setEditForm({ ...editForm, neighborhood: e.target.value })}
+                          value={editNeighborhoodOption}
+                          onChange={e => setEditNeighborhoodOption(e.target.value)}
                           className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                         >
                           <option value="">Selecione...</option>
@@ -883,6 +916,15 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
                           ))}
                           <option value="Outros">Outros</option>
                         </select>
+                        {editNeighborhoodOption === 'Outros' && (
+                          <input
+                            type="text"
+                            placeholder="Digite seu bairro..."
+                            value={editCustomNeighborhood}
+                            onChange={e => setEditCustomNeighborhood(e.target.value)}
+                            className="w-full text-xs font-bold p-2.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-slate-800 text-slate-900 dark:text-white mt-2 focus:ring-2 focus:ring-purple-600 focus:outline-hidden animate-in fade-in duration-150"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Complemento</label>

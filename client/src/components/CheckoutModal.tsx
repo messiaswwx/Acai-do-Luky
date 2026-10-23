@@ -31,9 +31,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Address
   const [street, setStreet] = useState(() => customer?.address?.street || '');
   const [number, setNumber] = useState(() => customer?.address?.number || '');
-  const [neighborhood, setNeighborhood] = useState(() => customer?.address?.neighborhood || '');
+  const [selectedNeighborhoodOption, setSelectedNeighborhoodOption] = useState(() => {
+    const initial = customer?.address?.neighborhood || '';
+    if (!initial) return '';
+    const match = PRAIA_GRANDE_NEIGHBORHOODS.find(n => n.name.toLowerCase() === initial.trim().toLowerCase());
+    return match ? match.name : 'Outros';
+  });
+  const [customNeighborhood, setCustomNeighborhood] = useState(() => {
+    const initial = customer?.address?.neighborhood || '';
+    if (!initial) return '';
+    const match = PRAIA_GRANDE_NEIGHBORHOODS.find(n => n.name.toLowerCase() === initial.trim().toLowerCase());
+    return match ? '' : initial;
+  });
   const [complement, setComplement] = useState(() => customer?.address?.complement || '');
   const [reference, setReference] = useState(() => customer?.address?.reference || '');
+
+  const effectiveNeighborhood = useMemo(() => {
+    if (selectedNeighborhoodOption === 'Outros') {
+      return customNeighborhood.trim();
+    }
+    return selectedNeighborhoodOption;
+  }, [selectedNeighborhoodOption, customNeighborhood]);
 
   // Payment: 100% Online (Mercado Pago: Pix e Cartões)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
@@ -49,9 +67,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   );
   const deliveryFee = useMemo(() => {
     if (orderType !== 'ENTREGA') return 0;
-    if (!neighborhood) return 0;
-    return getDeliveryFeeByNeighborhood(neighborhood, 10.00);
-  }, [orderType, neighborhood]);
+    if (!selectedNeighborhoodOption) return 0;
+    if (selectedNeighborhoodOption === 'Outros') return 10.00;
+    return getDeliveryFeeByNeighborhood(selectedNeighborhoodOption, 10.00);
+  }, [orderType, selectedNeighborhoodOption]);
   const total = subtotal + deliveryFee;
 
   const copyPixKey = () => {
@@ -80,8 +99,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
 
     if (orderType === 'ENTREGA') {
-      if (!street.trim() || !number.trim() || !neighborhood.trim()) {
-        setErrorMsg('Por favor, preencha rua, número e bairro para a entrega.');
+      if (!street.trim() || !number.trim() || !selectedNeighborhoodOption || (selectedNeighborhoodOption === 'Outros' && !customNeighborhood.trim())) {
+        setErrorMsg('Por favor, preencha rua, número e o nome do seu bairro para a entrega.');
         return;
       }
     }
@@ -96,7 +115,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         address: orderType === 'ENTREGA' ? {
           street: sanitizeText(street),
           number: sanitizeText(number),
-          neighborhood: sanitizeText(neighborhood),
+          neighborhood: sanitizeText(effectiveNeighborhood || 'Outros'),
           complement: sanitizeText(complement),
           reference: sanitizeText(reference)
         } : undefined,
@@ -239,7 +258,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Bike className="w-5 h-5 text-purple-700 dark:text-purple-400 shrink-0" />
                 <span className="leading-tight">Receber em Casa</span>
                 <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 leading-tight">
-                  {neighborhood ? `Taxa: ${formatCurrency(deliveryFee)}` : 'Entrega rápida'}
+                  {selectedNeighborhoodOption ? `Taxa: ${formatCurrency(deliveryFee)}` : 'Entrega rápida'}
                 </span>
               </button>
 
@@ -294,7 +313,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         Bairro *
                       </label>
-                      {neighborhood && (
+                      {selectedNeighborhoodOption && (
                         <span className="text-[11px] font-black font-mono text-emerald-600 dark:text-emerald-400">
                           Taxa: {formatCurrency(deliveryFee)}
                         </span>
@@ -302,8 +321,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </div>
                     <select
                       required
-                      value={neighborhood}
-                      onChange={e => setNeighborhood(e.target.value)}
+                      value={selectedNeighborhoodOption}
+                      onChange={e => setSelectedNeighborhoodOption(e.target.value)}
                       className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium cursor-pointer"
                     >
                       <option value="">Selecione seu bairro...</option>
@@ -314,6 +333,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       ))}
                       <option value="Outros">Outros</option>
                     </select>
+
+                    {selectedNeighborhoodOption === 'Outros' && (
+                      <input
+                        type="text"
+                        required
+                        placeholder="Digite o nome do seu bairro..."
+                        value={customNeighborhood}
+                        onChange={e => setCustomNeighborhood(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-slate-800 text-slate-900 dark:text-white mt-2 font-medium focus:ring-2 focus:ring-purple-600 focus:outline-hidden animate-in fade-in duration-150"
+                        autoFocus
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Complemento</label>
@@ -483,9 +514,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <span className="font-bold text-slate-800 dark:text-slate-100">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Taxa de entrega{orderType === 'ENTREGA' && neighborhood ? ` (${neighborhood})` : ''}:</span>
+              <span>Taxa de entrega{orderType === 'ENTREGA' && (effectiveNeighborhood || selectedNeighborhoodOption) ? ` (${effectiveNeighborhood || selectedNeighborhoodOption})` : ''}:</span>
               <span className="font-bold text-slate-800 dark:text-slate-100">
-                {orderType === 'ENTREGA' ? (neighborhood ? formatCurrency(deliveryFee) : 'Selecione o bairro') : 'Grátis'}
+                {orderType === 'ENTREGA' ? (selectedNeighborhoodOption ? formatCurrency(deliveryFee) : 'Selecione o bairro') : 'Grátis'}
               </span>
             </div>
             <div className="flex justify-between text-base font-black text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
