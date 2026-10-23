@@ -314,6 +314,49 @@ export default function App() {
 
   // Restore active order from localStorage if exists
   useEffect(() => {
+    // Retorno oficial do Mercado Pago (Redirecionamento da tela ou app do Mercado Pago)
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const mpStatus = params.get('mp_status') || params.get('collection_status') || params.get('status');
+        const orderIdFromUrl = params.get('order_id') || params.get('external_reference');
+
+        if (orderIdFromUrl) {
+          localStorage.setItem('luky_active_order_id', orderIdFromUrl);
+
+          const handleMpOrder = (order: Order | null) => {
+            if (order) {
+              if (mpStatus === 'approved') {
+                order = {
+                  ...order,
+                  paymentDetails: {
+                    ...order.paymentDetails,
+                    isPaid: true,
+                    mercadoPagoStatus: 'approved'
+                  }
+                };
+              }
+              setActiveOrder(order);
+              try {
+                localStorage.setItem('luky_cached_active_order', JSON.stringify(order));
+              } catch {}
+              setIsTrackingModalOpen(true);
+            }
+          };
+
+          if (isSupabaseConfigured) {
+            fetchOrderById(orderIdFromUrl).then(handleMpOrder).catch(() => {});
+          } else {
+            fetch(`/api/orders/${orderIdFromUrl}`).then(r => r.ok ? r.json() : null).then(handleMpOrder).catch(() => {});
+          }
+
+          // Limpa a URL para remover os parâmetros da barra de endereço
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+      } catch {}
+    }
+
     let savedOrderId: string | null = null;
     try {
       savedOrderId = localStorage.getItem('luky_active_order_id');

@@ -4,6 +4,7 @@ import { formatCurrency, formatDateTime, generateWhatsAppMessage } from '../util
 import { getSocket } from '../utils/socket';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { subscribeToOrder } from '../services/supabaseService';
+import { checkOrderPaymentStatus } from '../services/mercadopagoService';
 import { playCancellationAlert } from '../utils/audio';
 import { 
   CheckCircle2, 
@@ -17,7 +18,10 @@ import {
   XCircle, 
   AlertTriangle, 
   RefreshCw,
-  X
+  X,
+  Smartphone,
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
 
 interface OrderTrackingModalProps {
@@ -35,6 +39,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 }) => {
   const [order, setOrder] = useState<Order>(initialOrder || ({} as Order));
   const [copiedPix, setCopiedPix] = useState(false);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [mpStatusInfo, setMpStatusInfo] = useState<{ isPaid?: boolean; message?: string } | null>(() => {
+    if (initialOrder?.paymentDetails?.isPaid) return { isPaid: true };
+    return null;
+  });
   const previousStatusRef = useRef(initialOrder?.status || 'NOVO');
 
   useEffect(() => {
@@ -47,6 +56,48 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const currentStatus = order?.status || 'NOVO';
   const isCancelled = currentStatus === 'CANCELADO';
   const items = Array.isArray(order?.items) ? order.items : [];
+
+  const handleVerifyPayment = async () => {
+    if (!orderId) return;
+    setIsCheckingPayment(true);
+    try {
+      const res = await checkOrderPaymentStatus(orderId);
+      if (res.isPaid) {
+        setMpStatusInfo({ isPaid: true, message: 'Pagamento Aprovado no Mercado Pago! ⚡' });
+        setOrder(prev => ({
+          ...prev,
+          paymentDetails: {
+            ...prev.paymentDetails,
+            isPaid: true,
+            mercadoPagoStatus: 'approved'
+          }
+        }));
+      } else if (res.status === 'pending' || res.status === 'in_process') {
+        setMpStatusInfo({ isPaid: false, message: 'Pagamento ainda em análise no Mercado Pago. Se já concluiu, aguarde alguns segundos.' });
+      } else {
+        setMpStatusInfo({ isPaid: false, message: 'Nenhum pagamento identificado ainda. Conclua na tela oficial ou app do Mercado Pago.' });
+      }
+    } catch {
+      setMpStatusInfo({ isPaid: false, message: 'Não foi possível verificar o status no momento.' });
+    } finally {
+      setIsCheckingPayment(false);
+    }
+  };
+
+  useEffect(() => {
+    const isMp = order?.paymentDetails?.gateway === 'MERCADO_PAGO' || order?.paymentMethod === 'CARTAO_ONLINE';
+    if (orderId && isMp && !order?.paymentDetails?.isPaid && !mpStatusInfo?.isPaid) {
+      checkOrderPaymentStatus(orderId).then(res => {
+        if (res.isPaid) {
+          setMpStatusInfo({ isPaid: true, message: 'Pagamento Aprovado no Mercado Pago!' });
+          setOrder(prev => ({
+            ...prev,
+            paymentDetails: { ...prev.paymentDetails, isPaid: true, mercadoPagoStatus: 'approved' }
+          }));
+        }
+      }).catch(() => {});
+    }
+  }, [orderId]);
 
   useEffect(() => {
     if (!orderId) return;
@@ -393,16 +444,74 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
             </div>
           )}
 
-          {/* Cartão Online Reminder if chosen and not cancelled */}
+          {/* Mercado Pago Official Status & Action Button */}
           {!isCancelled && (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') && (
-            <div className="p-4 bg-purple-50 dark:bg-purple-950/40 rounded-2xl border border-purple-200 dark:border-purple-800 space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold text-purple-950 dark:text-purple-200">
-                <span>Pagamento Online:</span>
-                <span className="font-black text-purple-900 dark:text-amber-300">Mercado Pago</span>
-              </div>
-              <p className="text-[11px] text-purple-700 dark:text-purple-300">
-                💳 Cartão {order?.paymentDetails?.cardType === 'DEBITO' ? 'de Débito' : 'de Crédito'} • Total: {formatCurrency(order?.total || 0)}
-              </p>
+            <div className="space-y-2">
+              {order?.paymentDetails?.isPaid || mpStatusInfo?.isPaid ? (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Check className="w-6 h-6 stroke-[3]" />
+                  </div>
+                  <div>
+                    <span className="font-black text-emerald-950 dark:text-emerald-200 text-xs block">
+                      Pagamento Aprovado no Mercado Pago! ⚡
+                    </span>
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                      Confirmado com sucesso. Seu açaí já está sendo preparado!
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-indigo-950/40 rounded-2xl border border-blue-200 dark:border-blue-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Mercado Pago Oficial</span>
+                    </span>
+                    <span className="text-xs font-black text-purple-900 dark:text-amber-300">
+                      Total: {formatCurrency(order?.total || 0)}
+                    </span>
+                  </div>
+
+                  {order?.paymentDetails?.mercadoPagoInitPoint && (
+                    <a
+                      href={order.paymentDetails.mercadoPagoInitPoint}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-blue-700 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md shadow-blue-500/25 transition-all cursor-pointer"
+                    >
+                      <Smartphone className="w-4 h-4 text-amber-300" />
+                      <span>Abrir Tela Oficial / App do Mercado Pago</span>
+                      <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyPayment}
+                    disabled={isCheckingPayment}
+                    className="w-full bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-900 dark:text-blue-200 font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer"
+                  >
+                    {isCheckingPayment ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                        <span>Consultando Mercado Pago...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Já Paguei! Verificar Confirmação</span>
+                      </>
+                    )}
+                  </button>
+
+                  {mpStatusInfo?.message && (
+                    <p className="text-[11px] text-center text-slate-600 dark:text-slate-300 font-medium">
+                      {mpStatusInfo.message}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

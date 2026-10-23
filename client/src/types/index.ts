@@ -85,7 +85,7 @@ export interface CartItem {
 
 export type OrderStatus = 'NOVO' | 'PREPARANDO' | 'A_CAMINHO' | 'CONCLUIDO' | 'CANCELADO';
 
-export type PaymentMethod = 'PIX' | 'CARTAO_ONLINE' | 'MERCADO_PAGO_PIX' | 'MERCADO_PAGO_CARTAO' | 'CARTAO_ENTREGA' | 'DINHEIRO';
+export type PaymentMethod = 'PIX' | 'MERCADO_PAGO' | 'CARTAO_ONLINE' | 'MERCADO_PAGO_PIX' | 'MERCADO_PAGO_CARTAO' | 'CARTAO_ENTREGA' | 'DINHEIRO';
 
 export interface Order {
   id: string;
@@ -109,6 +109,11 @@ export interface Order {
     changeFor?: number;
     cardType?: 'DEBITO' | 'CREDITO';
     gateway?: string;
+    mercadoPagoPreferenceId?: string;
+    mercadoPagoInitPoint?: string;
+    mercadoPagoPaymentId?: string | number;
+    mercadoPagoStatus?: string;
+    isPaid?: boolean;
   };
   subtotal: number;
   deliveryFee: number;

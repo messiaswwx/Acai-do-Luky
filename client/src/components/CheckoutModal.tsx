@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import type { CartItem, StoreSettings, PaymentMethod, Order, CustomerProfile } from '../types';
 import { formatCurrency } from '../utils/format';
-import { X, Bike, Store, QrCode, CreditCard, ShieldCheck, Copy, Check, ArrowLeft, Send, Utensils } from 'lucide-react';
+import { X, Bike, Store, QrCode, ShieldCheck, Copy, Check, ArrowLeft, Send, Utensils, Smartphone, ExternalLink } from 'lucide-react';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { createOrder } from '../services/supabaseService';
+import { createMercadoPagoPreference } from '../services/mercadopagoService';
 import { sanitizeText, sanitizePhone } from '../utils/sanitize';
 import { PRAIA_GRANDE_NEIGHBORHOODS, getDeliveryFeeByNeighborhood } from '../utils/delivery';
 
@@ -61,9 +62,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return true;
   });
 
-  // Payment: 100% Online (Mercado Pago: Pix e Cartões)
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
-  const [cardType, setCardType] = useState<'DEBITO' | 'CREDITO'>('CREDITO');
+  // Forma de Pagamento: Mercado Pago Oficial (Padrão) ou Chave Pix Manual
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('MERCADO_PAGO');
   const [copiedPix, setCopiedPix] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,6 +116,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      const isMercadoPago = paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE';
+
       const orderPayload = {
         customerName: sanitizeText(customerName),
         customerPhone: sanitizePhone(customerPhone),
@@ -128,10 +130,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           reference: sanitizeText(reference)
         } : undefined,
         items,
-        paymentMethod: paymentMethod === 'CARTAO_ONLINE' ? ('CARTAO_ONLINE' as PaymentMethod) : ('PIX' as PaymentMethod),
+        paymentMethod: (isMercadoPago ? 'CARTAO_ONLINE' : 'PIX') as PaymentMethod,
         paymentDetails: {
-          cardType: paymentMethod === 'CARTAO_ONLINE' ? cardType : undefined,
-          gateway: 'MERCADO_PAGO'
+          gateway: isMercadoPago ? 'MERCADO_PAGO' : undefined,
+          isPaid: false
         },
         subtotal,
         deliveryFee,
@@ -163,6 +165,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
 
       if (createdOrder) {
+        // Se for Mercado Pago, cria a preferência de checkout oficial e redireciona
+        if (isMercadoPago) {
+          try {
+            const pref = await createMercadoPagoPreference(createdOrder);
+            if (pref?.initPoint) {
+              createdOrder.paymentDetails = {
+                ...createdOrder.paymentDetails,
+                gateway: 'MERCADO_PAGO',
+                mercadoPagoPreferenceId: pref.preferenceId,
+                mercadoPagoInitPoint: pref.initPoint,
+                isPaid: false
+              };
+
+              // Persiste no cache do cliente antes de redirecionar para a tela do MP
+              try {
+                localStorage.setItem('luky_active_order_id', createdOrder.id);
+                localStorage.setItem('luky_cached_active_order', JSON.stringify(createdOrder));
+              } catch {}
+
+              onOrderSuccess(createdOrder);
+
+              // Redireciona diretamente para o App do Mercado Pago ou Tela Oficial
+              window.location.href = pref.initPoint;
+              return;
+            }
+          } catch (mpErr) {
+            console.error('Falha ao gerar link do Mercado Pago:', mpErr);
+          }
+        }
+
         onOrderSuccess(createdOrder);
       }
     } catch (err: unknown) {
@@ -435,66 +467,123 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Forma de Pagamento (100% Online - Mercado Pago) */}
+          {/* 4. Forma de Pagamento */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-purple-900 text-amber-300 text-xs font-black flex items-center justify-center">4</span>
                 <h3 className="font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider">
-                  Pagamento Online
+                  Forma de Pagamento
                 </h3>
               </div>
               <span className="text-[10px] font-black text-purple-900 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2.5 py-0.5 rounded-full border border-purple-200 dark:border-purple-900/50 flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                Mercado Pago Seguro
+                Oficial Mercado Pago
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Opção 1: Pix Online */}
+            {/* Opções de Pagamento */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Opção 1: Mercado Pago Oficial (Pix, Cartão, App MP) */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('MERCADO_PAGO')}
+                className={`p-3.5 rounded-2xl border-2 font-bold text-left transition-all cursor-pointer relative overflow-hidden ${
+                  paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE'
+                    ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-sm ring-2 ring-purple-600/30'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 bg-white dark:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-5 h-5 text-purple-700 dark:text-purple-300" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-black text-sm text-slate-900 dark:text-white">Mercado Pago</span>
+                        <span className="text-[9px] bg-amber-400 text-purple-950 font-black px-1.5 py-0.5 rounded-md">OFICIAL</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Pix, Cartão ou App</p>
+                    </div>
+                  </div>
+                  {(paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE') && (
+                    <Check className="w-4 h-4 text-purple-700 dark:text-purple-400 stroke-[3] shrink-0 mt-1" />
+                  )}
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-purple-200/60 dark:border-purple-900/60 flex items-center gap-1.5 text-[10px] text-purple-800 dark:text-purple-300 font-bold">
+                  <ExternalLink className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                  <span>Abre tela oficial ou app Mercado Pago</span>
+                </div>
+              </button>
+
+              {/* Opção 2: Chave Pix Manual */}
               <button
                 type="button"
                 onClick={() => setPaymentMethod('PIX')}
-                className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                className={`p-3.5 rounded-2xl border-2 font-bold text-left transition-all cursor-pointer relative ${
                   paymentMethod === 'PIX'
-                    ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-200 shadow-sm ring-1 ring-emerald-500/30'
+                    ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-950 dark:text-emerald-200 shadow-sm ring-2 ring-emerald-500/30'
                     : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 bg-white dark:bg-slate-800/60'
                 }`}
               >
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
-                  <QrCode className="w-5 h-5" />
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-black text-sm text-slate-900 dark:text-white">Chave Pix Direta</span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Transferência manual</p>
+                    </div>
+                  </div>
+                  {paymentMethod === 'PIX' && (
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[3] shrink-0 mt-1" />
+                  )}
                 </div>
-                <span className="font-black text-sm">Pix Online</span>
-                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full font-black border border-emerald-200 dark:border-emerald-800">
-                  ⚡ Aprovação Imediata
-                </span>
-              </button>
 
-              {/* Opção 2: Cartão Online */}
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('CARTAO_ONLINE')}
-                className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  paymentMethod === 'CARTAO_ONLINE' || paymentMethod === 'CARTAO_ENTREGA'
-                    ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-sm ring-1 ring-purple-600/30'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 bg-white dark:bg-slate-800/60'
-                }`}
-              >
-                <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5" />
+                <div className="mt-2.5 pt-2 border-t border-emerald-200/60 dark:border-emerald-900/60 text-[10px] text-emerald-800 dark:text-emerald-300 font-bold">
+                  <span>Copia e cola da chave da loja</span>
                 </div>
-                <span className="font-black text-sm">Cartão Online</span>
-                <span className="text-[10px] text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2 py-0.5 rounded-full font-black border border-purple-200 dark:border-purple-800">
-                  Crédito / Débito
-                </span>
               </button>
             </div>
 
-            {/* Pix Details */}
+            {/* Informações da opção Mercado Pago */}
+            {(paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE') && (
+              <div className="bg-purple-50/80 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 p-4 rounded-2xl space-y-2.5 animate-in fade-in duration-200 text-xs">
+                <div className="flex items-center justify-between font-bold text-purple-950 dark:text-purple-200">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Ambiente Oficial do Mercado Pago</span>
+                  </span>
+                  <span className="text-xs font-black text-amber-600 dark:text-amber-400">{formatCurrency(total)}</span>
+                </div>
+                <p className="text-[11px] text-purple-900 dark:text-purple-300 leading-relaxed font-medium">
+                  Ao clicar em <strong>"Pagar com Mercado Pago"</strong>, você será redirecionado para a tela oficial ou app do Mercado Pago com:
+                </p>
+                <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold">
+                  <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-purple-200/70 dark:border-purple-800/60 text-slate-800 dark:text-slate-200">
+                    ⚡ Pix Imediato
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-purple-200/70 dark:border-purple-800/60 text-slate-800 dark:text-slate-200">
+                    💳 Cartão de Crédito
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-purple-200/70 dark:border-purple-800/60 text-slate-800 dark:text-slate-200">
+                    📱 App Mercado Pago
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Assim que o pagamento for concluído, você retorna automaticamente para acompanhar seu açaí em tempo real!
+                </p>
+              </div>
+            )}
+
+            {/* Informações da opção Pix Manual */}
             {paymentMethod === 'PIX' && (
               <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-4 rounded-2xl space-y-2.5 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">Chave Pix Instantânea ({settings.pixKeyType}):</span>
+                  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">Chave Pix Direta ({settings.pixKeyType}):</span>
                   <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">{formatCurrency(total)}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -514,48 +603,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </button>
                 </div>
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                  ⚡ <strong>Mercado Pago:</strong> Seu pedido entra em preparo imediatamente após o pagamento online!
-                </p>
-              </div>
-            )}
-
-            {/* Cartão Details */}
-            {(paymentMethod === 'CARTAO_ONLINE' || paymentMethod === 'CARTAO_ENTREGA') && (
-              <div className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 p-4 rounded-2xl space-y-3 animate-in fade-in duration-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-950 dark:text-purple-200">Modalidade do Cartão:</span>
-                  <span className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold">Mercado Pago</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCardType('CREDITO')}
-                    className={`p-2.5 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      cardType === 'CREDITO'
-                        ? 'border-purple-700 bg-white dark:bg-slate-800 text-purple-950 dark:text-amber-300 shadow-xs ring-1 ring-purple-600'
-                        : 'border-purple-200/60 dark:border-purple-900 bg-purple-100/50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300'
-                    }`}
-                  >
-                    <span>Cartão de Crédito</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCardType('DEBITO')}
-                    className={`p-2.5 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      cardType === 'DEBITO'
-                        ? 'border-purple-700 bg-white dark:bg-slate-800 text-purple-950 dark:text-amber-300 shadow-xs ring-1 ring-purple-600'
-                        : 'border-purple-200/60 dark:border-purple-900 bg-purple-100/50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300'
-                    }`}
-                  >
-                    <span>Cartão de Débito</span>
-                  </button>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-purple-800 dark:text-purple-300 pt-1 border-t border-purple-200/60 dark:border-purple-900/60">
-                  <span>Bandeiras aceitas:</span>
-                  <span className="font-bold">Visa • Master • Elo • Hiper</span>
-                </div>
-                <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium leading-relaxed">
-                  🔒 Pagamento 100% online preparado via Mercado Pago. Sem necessidade de máquina na entrega!
+                  Faça o Pix pelo aplicativo do seu banco e envie o comprovante no WhatsApp ao confirmar o pedido.
                 </p>
               </div>
             )}
@@ -592,12 +640,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 shadow-amber-500/20'
             }`}
           >
-            <Send className="w-5 h-5 stroke-[2.5]" />
+            {(paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE') ? (
+              <ExternalLink className="w-5 h-5 stroke-[2.5]" />
+            ) : (
+              <Send className="w-5 h-5 stroke-[2.5]" />
+            )}
             <span>
               {!settings.isOpen
                 ? 'Loja Fechada no Momento'
                 : isSubmitting
-                ? 'Enviando Pedido...'
+                ? 'Preparando Mercado Pago...'
+                : (paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE')
+                ? `Pagar no Mercado Pago (${formatCurrency(total)})`
                 : `Confirmar Pedido (${formatCurrency(total)})`}
             </span>
           </button>

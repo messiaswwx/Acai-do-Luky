@@ -676,14 +676,198 @@ app.patch('/api/orders/:id/status', requireAdminAuth, (req, res) => {
   res.json(updatedOrder);
 });
 
-  db.orders[orderIndex].updatedAt = new Date().toISOString();
-  saveDatabase(db);
+// ==============================================================================
+// ROTAS OFICIAIS MERCADO PAGO (CHECKOUT PRO / REDIRECIONAMENTO DE TELA E APP)
+// ==============================================================================
 
-  const updatedOrder = db.orders[orderIndex];
-  io.emit('order_status_updated', updatedOrder);
-  io.to(`order_${updatedOrder.id}`).emit('my_order_update', updatedOrder);
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || 'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
+const MP_PUBLIC_KEY = process.env.MP_PUBLIC_KEY || 'APP_USR-c062df6b-9d26-44b3-aa96-3595444a6ef7';
 
-  res.json(updatedOrder);
+app.post('/api/mercadopago/create-preference', async (req, res) => {
+  try {
+    const { order, origin } = req.body || {};
+    if (!order || !order.id) {
+      return res.status(400).json({ error: 'Dados do pedido ausentes' });
+    }
+
+    const baseOrigin = origin || 'https://acai-do-luky.vercel.app';
+    const total = Number(order.total) || 0;
+
+    const items = (Array.isArray(order.items) ? order.items : []).map(item => ({
+      id: item.id || `item-${Math.random().toString(36).substring(2, 7)}`,
+      title: `${item.size?.name || 'Açaí'} (${item.base?.name || 'Tradicional'})`.substring(0, 120),
+      description: 'Açaí artesanal montado com acompanhamentos',
+      quantity: Number(item.quantity) || 1,
+      currency_id: 'BRL',
+      unit_price: Number(item.unitPrice) || 0
+    }));
+
+    if (order.deliveryFee && Number(order.deliveryFee) > 0) {
+      items.push({
+        id: 'delivery-fee',
+        title: `Taxa de Entrega (${order.address?.neighborhood || 'Praia Grande'})`,
+        description: 'Entrega rápida e refrigerada no endereço informado',
+        quantity: 1,
+        currency_id: 'BRL',
+        unit_price: Number(order.deliveryFee)
+      });
+    }
+
+    const calculatedTotal = items.reduce((acc, i) => acc + (i.unit_price * i.quantity), 0);
+    const finalItems = Math.abs(calculatedTotal - total) < 0.05 ? items : [
+      {
+        id: order.id,
+        title: `Pedido ${order.id} - Açaí do Luky`,
+        description: 'Açaí artesanal montado com acompanhamentos',
+        quantity: 1,
+        currency_id: 'BRL',
+        unit_price: total
+      }
+    ];
+
+    const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+    const areaCode = cleanPhone.length >= 10 ? cleanPhone.substring(0, 2) : '13';
+    const phoneNumber = cleanPhone.length >= 10 ? cleanPhone.substring(2) : cleanPhone;
+
+    const preferencePayload = {
+      items: finalItems,
+      payer: {
+        name: order.customerName || 'Cliente Açaí do Luky',
+        phone: {
+          area_code: areaCode,
+          number: phoneNumber
+        }
+      },
+      back_urls: {
+        success: `${baseOrigin}/?mp_status=approved&order_id=${encodeURIComponent(order.id)}`,
+        pending: `${baseOrigin}/?mp_status=pending&order_id=${encodeURIComponent(order.id)}`,
+        failure: `${baseOrigin}/?mp_status=failure&order_id=${encodeURIComponent(order.id)}`
+      },
+      auto_return: 'approved',
+      external_reference: order.id,
+      statement_descriptor: 'ACAI DO LUKY',
+      expires: false
+    };
+
+    const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(preferencePayload)
+    });
+
+    if (!mpRes.ok) {
+      const errText = await mpRes.text();
+      console.error('Erro Mercado Pago:', errText);
+      return res.status(502).json({ error: 'Erro ao gerar preferência no Mercado Pago' });
+    }
+
+    const mpData = await mpRes.json();
+    return res.json({
+      preferenceId: mpData.id,
+      initPoint: mpData.init_point,
+      sandboxInitPoint: mpData.sandbox_init_point
+    });
+  } catch (err) {
+    console.error('Exceção ao criar preferência:', err);
+    return res.status(500).json({ error: 'Erro interno ao processar Mercado Pago' });
+  }
+});
+
+app.get('/api/mercadopago/check-payment/:orderId', async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const url = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc&limit=1`;
+    
+    const mpRes = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!mpRes.ok) {
+      return res.status(502).json({ isPaid: false, status: 'error' });
+    }
+
+    const data = await mpRes.json();
+    const payment = data.results && data.results[0];
+
+    if (!payment) {
+      return res.json({ isPaid: false, status: 'not_found' });
+    }
+
+    const isPaid = payment.status === 'approved';
+
+    // Se estiver pago, sincroniza no banco local se o pedido existir
+    if (isPaid) {
+      const orderIndex = db.orders.findIndex(o => o.id === orderId);
+      if (orderIndex !== -1) {
+        db.orders[orderIndex].paymentDetails = {
+          ...db.orders[orderIndex].paymentDetails,
+          gateway: 'MERCADO_PAGO',
+          mercadoPagoStatus: payment.status,
+          mercadoPagoPaymentId: payment.id,
+          isPaid: true
+        };
+        saveDatabase(db);
+        io.emit('order_status_updated', db.orders[orderIndex]);
+        io.to(`order_${orderId}`).emit('my_order_update', db.orders[orderIndex]);
+      }
+    }
+
+    return res.json({
+      isPaid,
+      status: payment.status,
+      statusDetail: payment.status_detail,
+      paymentId: payment.id,
+      paymentMethodId: payment.payment_method_id,
+      dateApproved: payment.date_approved,
+      amount: payment.transaction_amount
+    });
+  } catch (err) {
+    console.error('Erro ao consultar status no MP:', err);
+    return res.status(500).json({ isPaid: false, status: 'error' });
+  }
+});
+
+app.post('/api/mercadopago/webhook', async (req, res) => {
+  try {
+    const topic = req.query.topic || req.body?.type;
+    const id = req.query.id || req.body?.data?.id;
+
+    if (topic === 'payment' && id) {
+      const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, {
+        headers: { 'Authorization': `Bearer ${MP_ACCESS_TOKEN}` }
+      });
+      if (mpRes.ok) {
+        const payment = await mpRes.json();
+        const orderId = payment.external_reference;
+        if (orderId && payment.status === 'approved') {
+          const orderIndex = db.orders.findIndex(o => o.id === orderId);
+          if (orderIndex !== -1) {
+            db.orders[orderIndex].paymentDetails = {
+              ...db.orders[orderIndex].paymentDetails,
+              gateway: 'MERCADO_PAGO',
+              mercadoPagoStatus: 'approved',
+              mercadoPagoPaymentId: payment.id,
+              isPaid: true
+            };
+            saveDatabase(db);
+            io.emit('order_status_updated', db.orders[orderIndex]);
+            io.to(`order_${orderId}`).emit('my_order_update', db.orders[orderIndex]);
+          }
+        }
+      }
+    }
+    return res.status(200).send('OK');
+  } catch (err) {
+    console.warn('Erro no webhook MP:', err);
+    return res.status(200).send('OK');
+  }
 });
 
 // Socket.IO

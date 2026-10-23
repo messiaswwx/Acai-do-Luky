@@ -823,20 +823,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span>Total:</span>
                         <span className="text-purple-950 dark:text-amber-400 font-black text-base">{formatCurrency(order.total)}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between items-center flex-wrap gap-1">
                         <span>Pagamento:</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">
-                          {order.paymentMethod === 'PIX' && '⚡ Pix Online (Mercado Pago)'}
-                          {(order.paymentMethod === 'CARTAO_ONLINE' || order.paymentDetails?.gateway === 'MERCADO_PAGO') && (
-                            `💳 Cartão Online (${order.paymentDetails?.cardType || 'Crédito'} - Mercado Pago)`
-                          )}
-                          {order.paymentMethod === 'CARTAO_ENTREGA' && !order.paymentDetails?.gateway && (
-                            `Cartão (${order.paymentDetails?.cardType || 'Débito/Crédito'})`
-                          )}
-                          {order.paymentMethod === 'DINHEIRO' && (
-                            order.paymentDetails?.needChange 
-                              ? `Dinheiro (Troco p/ ${formatCurrency(order.paymentDetails.changeFor || 0)})`
-                              : 'Dinheiro'
+                        <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
+                          {(order.paymentDetails?.gateway === 'MERCADO_PAGO' || order.paymentMethod === 'CARTAO_ONLINE' || order.paymentMethod === 'MERCADO_PAGO') ? (
+                            <>
+                              <span className="bg-blue-100 dark:bg-blue-950/80 text-blue-900 dark:text-blue-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                Mercado Pago Oficial
+                              </span>
+                              {order.paymentDetails?.isPaid ? (
+                                <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded-md font-black text-[10px]">
+                                  PAGO ✓
+                                </span>
+                              ) : (
+                                <span className="bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded-md font-black text-[10px]">
+                                  Aguardando MP
+                                </span>
+                              )}
+                            </>
+                          ) : order.paymentMethod === 'PIX' ? (
+                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">⚡ Pix Direto (Loja)</span>
+                          ) : (
+                            order.paymentMethod === 'DINHEIRO' && (
+                              order.paymentDetails?.needChange 
+                                ? `Dinheiro (Troco p/ ${formatCurrency(order.paymentDetails.changeFor || 0)})`
+                                : 'Dinheiro'
+                            )
                           )}
                         </span>
                       </div>
