@@ -659,8 +659,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 onClick={() => setFilterStatus(st)}
                 className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
                   filterStatus === st
-                    ? 'bg-purple-900 text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-purple-900 dark:bg-purple-700 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
               >
                 {st === 'TODOS' && 'Todos os Pedidos'}
@@ -674,32 +674,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {filteredOrders.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 text-slate-400">
-              <ShoppingBag className="w-12 h-12 stroke-1 mx-auto mb-2 text-slate-300" />
-              <p className="font-bold text-slate-600">Nenhum pedido com este filtro.</p>
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 text-center border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500">
+              <ShoppingBag className="w-12 h-12 stroke-1 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+              <p className="font-bold text-slate-600 dark:text-slate-300">Nenhum pedido com este filtro.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredOrders.map(order => (
                 <div
                   key={order.id}
-                  className={`bg-white rounded-2xl border-2 flex flex-col justify-between overflow-hidden shadow-xs transition-shadow hover:shadow-md ${
+                  className={`bg-white dark:bg-slate-900 rounded-2xl border-2 flex flex-col justify-between overflow-hidden shadow-xs transition-shadow hover:shadow-md ${
                     order.status === 'NOVO'
-                      ? 'border-amber-400 bg-amber-50/20 shadow-md ring-2 ring-amber-400/30'
+                      ? 'border-amber-400 dark:border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 shadow-md ring-2 ring-amber-400/30'
                       : order.status === 'PREPARANDO'
-                      ? 'border-purple-300'
+                      ? 'border-purple-300 dark:border-purple-700'
                       : order.status === 'A_CAMINHO'
-                      ? 'border-blue-300'
-                      : 'border-slate-200 opacity-95'
+                      ? 'border-blue-300 dark:border-blue-700'
+                      : 'border-slate-200 dark:border-slate-800 opacity-95'
                   }`}
                 >
-                  <div className="p-4 border-b border-slate-100 flex items-start justify-between bg-slate-50/70">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between bg-slate-50/70 dark:bg-slate-800/80">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-900 text-base">{order.id}</span>
-                        <span className="text-xs text-slate-500 font-semibold">{formatDateTime(order.createdAt)}</span>
+                        <span className="font-black text-slate-900 dark:text-white text-base">{order.id}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{formatDateTime(order.createdAt)}</span>
                       </div>
-                      <h3 className="font-bold text-slate-800 text-sm mt-0.5">{order.customerName}</h3>
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm mt-0.5">{order.customerName}</h3>
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
@@ -721,7 +721,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         {order.status === 'CANCELADO' && 'Cancelado'}
                       </span>
 
-                      <span className="text-[11px] font-bold text-slate-600">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                         {order.orderType === 'ENTREGA' ? '🛵 Entrega' : '🏪 Retirada'}
                       </span>
                     </div>
@@ -729,44 +729,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <div className="p-4 space-y-3 flex-1 text-xs">
                     {order.orderType === 'ENTREGA' && order.address ? (
-                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-0.5">
-                        <p className="font-bold text-slate-800">
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/70 space-y-0.5">
+                        <p className="font-bold text-slate-800 dark:text-slate-200">
                           {order.address.street}, {order.address.number} - {order.address.neighborhood}
                         </p>
-                        {order.address.complement && <p className="text-slate-500">Compl: {order.address.complement}</p>}
-                        {order.address.reference && <p className="text-slate-500">Ref: {order.address.reference}</p>}
+                        {order.address.complement && <p className="text-slate-500 dark:text-slate-400">Compl: {order.address.complement}</p>}
+                        {order.address.reference && <p className="text-slate-500 dark:text-slate-400">Ref: {order.address.reference}</p>}
                       </div>
                     ) : (
-                      <div className="bg-purple-50 p-2 rounded-xl text-purple-900 font-semibold text-[11px]">
+                      <div className="bg-purple-50 dark:bg-purple-950/50 p-2 rounded-xl text-purple-900 dark:text-purple-300 font-semibold text-[11px] border border-purple-100 dark:border-purple-900/60">
                         Retirada presencial no balcão
                       </div>
                     )}
 
-                    <div className="space-y-2 border-t border-slate-100 pt-2">
+                    <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                       {order.items.map((item, idx) => (
-                        <div key={idx} className="bg-slate-50/70 p-2 rounded-xl border border-slate-100">
-                          <div className="flex justify-between font-bold text-slate-900">
+                        <div key={idx} className="bg-slate-50/70 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                          <div className="flex justify-between font-bold text-slate-900 dark:text-white">
                             <span>{item.quantity}x {item.size.name}</span>
                             <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
                           </div>
-                          <p className="text-purple-800 font-semibold">{item.base.name}</p>
+                          <p className="text-purple-800 dark:text-purple-300 font-semibold">{item.base.name}</p>
                           {item.freeToppings.length > 0 && (
-                            <p className="text-slate-600">
-                              <span className="font-semibold text-slate-700">Acomp:</span> {item.freeToppings.map(t => t.name).join(', ')}
+                            <p className="text-slate-600 dark:text-slate-300">
+                              <span className="font-semibold text-slate-700 dark:text-slate-200">Acomp:</span> {item.freeToppings.map(t => t.name).join(', ')}
                             </p>
                           )}
                           {item.premiumToppings.length > 0 && (
-                            <p className="text-amber-700">
+                            <p className="text-amber-700 dark:text-amber-400">
                               <span className="font-semibold">Extras:</span> {item.premiumToppings.map(p => `${p.quantity > 1 ? `${p.quantity}x ` : ''}${p.item.name}`).join(', ')}
                             </p>
                           )}
                           {item.syrups.length > 0 && (
-                            <p className="text-purple-700">
+                            <p className="text-purple-700 dark:text-purple-400">
                               <span className="font-semibold">Caldas:</span> {item.syrups.map(s => s.name).join(', ')}
                             </p>
                           )}
                           {item.notes && (
-                            <p className="italic text-purple-950 font-bold bg-amber-100/70 p-1 rounded mt-1">
+                            <p className="italic text-purple-950 dark:text-amber-200 font-bold bg-amber-100/70 dark:bg-amber-950/60 border border-transparent dark:border-amber-800 p-1 rounded mt-1">
                               Obs: {item.notes}
                             </p>
                           )}
@@ -774,14 +774,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ))}
                     </div>
 
-                    <div className="border-t border-slate-100 pt-2 space-y-1">
-                      <div className="flex justify-between font-bold text-sm text-slate-900">
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
+                      <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-slate-200">
                         <span>Total:</span>
-                        <span className="text-purple-950 font-black text-base">{formatCurrency(order.total)}</span>
+                        <span className="text-purple-950 dark:text-amber-400 font-black text-base">{formatCurrency(order.total)}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 flex justify-between">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between">
                         <span>Pagamento:</span>
-                        <span className="font-bold text-slate-700">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
                           {order.paymentMethod === 'PIX' && 'Pix'}
                           {order.paymentMethod === 'CARTAO_ENTREGA' && `Cartão (${order.paymentDetails?.cardType || 'Débito/Crédito'})`}
                           {order.paymentMethod === 'DINHEIRO' && (
@@ -794,7 +794,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 space-y-2">
                     {order.status === 'NOVO' && (
                       <div className="flex gap-2">
                         <button
@@ -810,10 +810,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             setRejectionReason('Ingredientes ou produtos esgotados no momento');
                             setCustomRejectionReason('');
                           }}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+                          className="bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
                           title="Não aceitar / Recusar pedido"
                         >
-                          <XCircle className="w-4 h-4 text-red-600" />
+                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                           <span>Não Aceitar</span>
                         </button>
                       </div>
@@ -834,10 +834,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             setRejectionReason('Alta demanda / Fila de espera muito longa');
                             setCustomRejectionReason('');
                           }}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-bold py-2.5 px-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          className="bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700 font-bold py-2.5 px-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer"
                           title="Cancelar pedido"
                         >
-                          <XCircle className="w-4 h-4 text-red-600" />
+                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                           <span>Cancelar</span>
                         </button>
                       </div>
@@ -854,13 +854,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
 
                     {order.status === 'CANCELADO' && (
-                      <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl text-xs space-y-1">
-                        <p className="font-bold flex items-center gap-1.5 text-red-800">
-                          <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 p-2.5 rounded-xl text-xs space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-red-800 dark:text-red-200">
+                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
                           <span>Pedido Não Aceito / Cancelado</span>
                         </p>
                         {order.cancellationReason && (
-                          <p className="text-[11px] text-red-600 italic">
+                          <p className="text-[11px] text-red-600 dark:text-red-300 italic">
                             Motivo: "{order.cancellationReason}"
                           </p>
                         )}
@@ -872,7 +872,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         href={`https://wa.me/55${order.customerPhone.replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
+                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
                         <span>WhatsApp</span>
@@ -880,9 +880,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                       <button
                         onClick={() => setSelectedOrderForPrint(order)}
-                        className="flex-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
                       >
-                        <Printer className="w-3.5 h-3.5 text-slate-600" />
+                        <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
                         <span>Imprimir</span>
                       </button>
                     </div>
@@ -937,11 +937,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* 1. SIZES & PROMOTIONS WITH HOURLY DURATION */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="font-black text-sm text-purple-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-2">
                 <Flame className="w-4 h-4 text-amber-500" />
                 <span>Copos & Promoções Temporárias</span>
               </h3>
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 O cliente visualiza o desconto e o contador de tempo restante
               </span>
             </div>
@@ -959,16 +959,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     key={size.id}
                     className={`p-4 rounded-3xl border-2 transition-all space-y-3 ${
                       !size.available
-                        ? 'border-slate-200 bg-slate-50 opacity-60'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 opacity-60'
                         : hasDiscount
-                          ? 'border-amber-400 bg-amber-50/20 shadow-md ring-2 ring-amber-400/20'
-                          : 'border-slate-200 hover:border-purple-300'
+                          ? 'border-amber-400 dark:border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 shadow-md ring-2 ring-amber-400/20'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-600 bg-white dark:bg-slate-800/40'
                     }`}
                   >
                     {/* Size Top Row */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-black text-base text-slate-900">{size.name}</span>
+                        <span className="font-black text-base text-slate-900 dark:text-white">{size.name}</span>
                         {hasDiscount && (
                           <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
                             <Flame className="w-3 h-3 fill-white" />
@@ -980,7 +980,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         onClick={() => handleToggleItemAvailability('sizes', size.id)}
                         className={`text-xs px-2.5 py-1 rounded-full font-black transition-colors cursor-pointer ${
-                          size.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                          size.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
                         }`}
                       >
                         {size.available ? 'Disponível' : 'Pausado'}
@@ -990,7 +990,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {/* Inputs: Normal Price & Discount */}
                     <div className="grid grid-cols-2 gap-3 pt-1">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
                           Preço Normal (R$)
                         </label>
                         <input
@@ -999,12 +999,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           min="1"
                           value={basePrice}
                           onChange={e => handleSizeOriginalPriceChange(size.id, parseFloat(e.target.value) || 0)}
-                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
                           Desconto (% OFF)
                         </label>
                         <input
@@ -1013,14 +1013,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           max="90"
                           value={discount}
                           onChange={e => handleSizeDiscountChange(size.id, parseInt(e.target.value) || 0)}
-                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 bg-white text-purple-900"
+                          className="w-full text-sm font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-purple-900 dark:text-amber-300"
                         />
                       </div>
                     </div>
 
                     {/* Quick Discount Shortcut Buttons */}
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Porcentagem de desconto:</span>
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 block mb-1">Porcentagem de desconto:</span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {[0, 10, 15, 20, 25, 30].map(pct => (
                           <button
@@ -1030,7 +1030,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className={`text-[11px] px-2.5 py-1 rounded-lg font-black transition-all cursor-pointer ${
                               discount === pct
                                 ? 'bg-amber-400 text-purple-950 shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                             }`}
                           >
                             {pct === 0 ? 'Sem desc.' : `${pct}%`}
@@ -1041,18 +1041,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* TEMPORARY DISCOUNT: DURATION IN HOURS */}
                     {hasDiscount && (
-                      <div className="p-3 bg-purple-50/80 rounded-2xl border border-purple-200/80 space-y-2">
+                      <div className="p-3 bg-purple-50/80 dark:bg-purple-950/40 rounded-2xl border border-purple-200/80 dark:border-purple-900/60 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-purple-700" />
+                          <span className="text-xs font-black text-purple-950 dark:text-purple-300 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
                             Duração Temporária (em Horas)
                           </span>
                           {size.discountHours ? (
-                            <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/60 px-2 py-0.5 rounded-full">
                               Fixado: {size.discountHours}h
                             </span>
                           ) : (
-                            <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full">
                               Sem prazo
                             </span>
                           )}
@@ -1075,8 +1075,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 onClick={() => handleSizeDiscountDurationChange(size.id, item.hours)}
                                 className={`text-[10px] px-2.5 py-1 rounded-lg font-black transition-all cursor-pointer ${
                                   isSelected
-                                    ? 'bg-purple-800 text-white shadow-xs'
-                                    : 'bg-white hover:bg-purple-100 text-purple-900 border border-purple-200'
+                                    ? 'bg-purple-800 dark:bg-purple-700 text-white shadow-xs'
+                                    : 'bg-white dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-slate-700 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-slate-700'
                                 }`}
                               >
                                 {item.label}
@@ -1087,7 +1087,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                         {/* Timer remaining preview */}
                         {remaining && (
-                          <div className="pt-1 flex items-center justify-between text-[11px] font-bold text-purple-900 border-t border-purple-200/60">
+                          <div className="pt-1 flex items-center justify-between text-[11px] font-bold text-purple-900 dark:text-purple-300 border-t border-purple-200/60 dark:border-purple-900/60">
                             <span>⏳ Validade ativa:</span>
                             <span className="bg-amber-400 text-purple-950 px-2 py-0.5 rounded-md font-black">
                               {remaining}
@@ -1099,27 +1099,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* Resulting Price Banner & Clear Button */}
                     <div className={`p-2.5 rounded-2xl flex items-center justify-between text-xs ${
-                      hasDiscount ? 'bg-amber-100/70 border border-amber-300 text-purple-950 font-bold' : 'bg-slate-100 text-slate-700'
+                      hasDiscount ? 'bg-amber-100/70 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-purple-950 dark:text-amber-200 font-bold' : 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700'
                     }`}>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">Preço Final ao Cliente:</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Preço Final ao Cliente:</span>
                         <div className="flex items-baseline gap-2">
-                          <span className="font-black text-base text-purple-950">{formatCurrency(size.price)}</span>
+                          <span className="font-black text-base text-purple-950 dark:text-amber-400">{formatCurrency(size.price)}</span>
                           {hasDiscount && (
-                            <span className="line-through text-slate-400 text-[11px]">{formatCurrency(basePrice)}</span>
+                            <span className="line-through text-slate-400 dark:text-slate-500 text-[11px]">{formatCurrency(basePrice)}</span>
                           )}
                         </div>
                       </div>
 
                       {hasDiscount ? (
                         <div className="flex flex-col items-end gap-1">
-                          <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black block">
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full font-black block">
                             Cliente economiza {formatCurrency(savings)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleClearDiscount(size.id)}
-                            className="text-[10px] text-red-600 hover:text-red-800 font-bold flex items-center gap-1 cursor-pointer"
+                            className="text-[10px] text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
                           >
                             <XCircle className="w-3 h-3" />
                             <span>Remover Desconto</span>
@@ -1134,21 +1134,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* 2. ADICIONAIS ESPECIAIS (PAGOS) */}
-          <div className="space-y-3 pt-3 border-t border-slate-200">
-            <h3 className="font-black text-sm text-amber-700 uppercase tracking-wider flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-amber-600" />
+          <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <h3 className="font-black text-sm text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>Preços dos Adicionais Especiais</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {editableMenu.premiumToppings.map(item => (
-                <div key={item.id} className="p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <div key={item.id} className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-800">{item.name}</span>
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{item.name}</span>
                     <button
                       onClick={() => handleToggleItemAvailability('premiumToppings', item.id)}
                       className={`text-[10px] px-2 py-0.5 rounded-full font-black transition-colors cursor-pointer ${
-                        item.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        item.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
                       }`}
                     >
                       {item.available ? 'Disponível' : 'Pausado'}
@@ -1156,14 +1156,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-bold">Valor: R$</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">Valor: R$</span>
                     <input
                       type="number"
                       step="0.5"
                       min="0"
                       value={item.price}
                       onChange={e => handlePremiumToppingPriceChange(item.id, parseFloat(e.target.value) || 0)}
-                      className="w-full text-xs font-bold p-1.5 rounded-lg border border-slate-200 bg-white"
+                      className="w-full text-xs font-bold p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
@@ -1172,16 +1172,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* 3. BASES */}
-          <div className="space-y-3 pt-3 border-t border-slate-200">
-            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Bases de Açaí / Cupuaçu</h3>
+          <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <h3 className="font-black text-sm text-purple-900 dark:text-amber-300 uppercase tracking-wider">Bases de Açaí / Cupuaçu</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {editableMenu.bases.map(base => (
-                <div key={base.id} className="p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-800">{base.name}</span>
+                <div key={base.id} className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{base.name}</span>
                   <button
                     onClick={() => handleToggleItemAvailability('bases', base.id)}
                     className={`text-[10px] px-2 py-0.5 rounded-full font-black transition-colors cursor-pointer ${
-                      base.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      base.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
                     }`}
                   >
                     {base.available ? 'OK' : 'Falta'}
@@ -1192,16 +1192,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* 4. ACOMPANHAMENTOS GRÁTIS */}
-          <div className="space-y-3 pt-3 border-t border-slate-200">
-            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Acompanhamentos Grátis</h3>
+          <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <h3 className="font-black text-sm text-purple-900 dark:text-amber-300 uppercase tracking-wider">Acompanhamentos Grátis</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {editableMenu.freeToppings.map(item => (
-                <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-800 truncate mr-2">{item.name}</span>
+                <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">{item.name}</span>
                   <button
                     onClick={() => handleToggleItemAvailability('freeToppings', item.id)}
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors cursor-pointer ${
-                      item.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      item.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
                     }`}
                   >
                     {item.available ? 'OK' : 'Falta'}
@@ -1212,16 +1212,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           {/* 5. CALDAS */}
-          <div className="space-y-3 pt-3 border-t border-slate-200">
-            <h3 className="font-black text-sm text-purple-900 uppercase tracking-wider">Caldas & Coberturas</h3>
+          <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <h3 className="font-black text-sm text-purple-900 dark:text-amber-300 uppercase tracking-wider">Caldas & Coberturas</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {editableMenu.syrups.map(item => (
-                <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-800 truncate mr-2">{item.name}</span>
+                <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">{item.name}</span>
                   <button
                     onClick={() => handleToggleItemAvailability('syrups', item.id)}
                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors cursor-pointer ${
-                      item.available ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      item.available ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300'
                     }`}
                   >
                     {item.available ? 'OK' : 'Falta'}
@@ -1279,7 +1279,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={loadInventory}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${inventoryLoading ? 'animate-spin' : ''}`} />
                 <span>Atualizar</span>
@@ -1650,81 +1650,81 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Empresa</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nome da Empresa</label>
                 <input
                   type="text"
                   value={localSettings.storeName}
                   onChange={e => setLocalSettings({ ...localSettings, storeName: e.target.value })}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp da Loja</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">WhatsApp da Loja</label>
                 <input
                   type="text"
                   value={localSettings.whatsapp}
                   onChange={e => setLocalSettings({ ...localSettings, whatsapp: e.target.value })}
                   placeholder="5511999999999"
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Chave Pix</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Chave Pix</label>
                 <input
                   type="text"
                   value={localSettings.pixKey}
                   onChange={e => setLocalSettings({ ...localSettings, pixKey: e.target.value })}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tipo da Chave Pix</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tipo da Chave Pix</label>
                 <input
                   type="text"
                   value={localSettings.pixKeyType}
                   onChange={e => setLocalSettings({ ...localSettings, pixKeyType: e.target.value })}
                   placeholder="Ex: CPF, Telefone, E-mail"
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Taxa de Entrega Padrão (R$)</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Taxa de Entrega Padrão (R$)</label>
                 <input
                   type="number"
                   step="0.5"
                   value={localSettings.deliveryFee}
                   onChange={e => setLocalSettings({ ...localSettings, deliveryFee: parseFloat(e.target.value) || 0 })}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tempo Estimado de Espera</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tempo Estimado de Espera</label>
                 <input
                   type="text"
                   value={localSettings.estimatedTime}
                   onChange={e => setLocalSettings({ ...localSettings, estimatedTime: e.target.value })}
                   placeholder="Ex: 30 - 45 min"
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Endereço de Retirada</label>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Endereço de Retirada</label>
               <input
                 type="text"
                 value={localSettings.address}
                 onChange={e => setLocalSettings({ ...localSettings, address: e.target.value })}
-                className="w-full text-xs p-3 rounded-xl border border-slate-200"
+                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
               />
             </div>
 
