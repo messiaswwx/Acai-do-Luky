@@ -178,7 +178,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
           cancellationReason: cancelReason
         };
         try {
-          localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+          localStorage.removeItem('luky_active_order_id');
+          localStorage.removeItem('luky_cached_active_order');
         } catch {}
         return next;
       });
@@ -258,7 +259,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               }
             };
             try {
-              localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+              if (next.status === 'CANCELADO' || next.status === 'CONCLUIDO') {
+                localStorage.removeItem('luky_active_order_id');
+                localStorage.removeItem('luky_cached_active_order');
+              } else {
+                localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+              }
             } catch {}
             return next;
           });

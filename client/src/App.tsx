@@ -272,7 +272,12 @@ export default function App() {
       if (typeof window !== 'undefined') {
         const raw = localStorage.getItem('luky_cached_active_order');
         if (raw) {
-          return sanitizeOrder(JSON.parse(raw));
+          const parsed = sanitizeOrder(JSON.parse(raw));
+          if (parsed && parsed.status !== 'CONCLUIDO' && parsed.status !== 'CANCELADO') {
+            return parsed;
+          }
+          localStorage.removeItem('luky_cached_active_order');
+          localStorage.removeItem('luky_active_order_id');
         }
       }
     } catch {}
@@ -409,16 +414,14 @@ export default function App() {
     if (savedOrderId && savedOrderId !== 'undefined' && savedOrderId !== 'null') {
       const applyOrder = (order: Order | null) => {
         const sanitized = sanitizeOrder(order);
-        if (sanitized) {
+        if (sanitized && sanitized.status !== 'CONCLUIDO' && sanitized.status !== 'CANCELADO') {
           setActiveOrder(sanitized);
           try {
             localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
             localStorage.setItem('luky_active_order_id', sanitized.id);
           } catch {}
-          if (sanitized.status !== 'CONCLUIDO') {
-            setIsTrackingModalOpen(true);
-          }
         } else {
+          setActiveOrder(null);
           try {
             localStorage.removeItem('luky_active_order_id');
             localStorage.removeItem('luky_cached_active_order');
@@ -469,7 +472,12 @@ export default function App() {
           }
           setActiveOrder(sanitized);
           try {
-            localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+            if (sanitized.status === 'CANCELADO' || sanitized.status === 'CONCLUIDO') {
+              localStorage.removeItem('luky_active_order_id');
+              localStorage.removeItem('luky_cached_active_order');
+            } else {
+              localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
+            }
           } catch {}
         }
       } catch (err) {
@@ -658,6 +666,16 @@ export default function App() {
 
   const handleCloseTracking = useCallback(() => {
     setIsTrackingModalOpen(false);
+    setActiveOrder(prev => {
+      if (prev && (prev.status === 'CANCELADO' || prev.status === 'CONCLUIDO')) {
+        try {
+          localStorage.removeItem('luky_active_order_id');
+          localStorage.removeItem('luky_cached_active_order');
+        } catch {}
+        return null;
+      }
+      return prev;
+    });
   }, []);
 
   const handleNewOrder = useCallback(() => {
