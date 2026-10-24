@@ -125,10 +125,12 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
           <div className="pt-1 space-y-1">
             <p>
               <span className="font-bold">PAGAMENTO:</span>{' '}
-              {order.paymentMethod === 'PIX'
-                ? 'PIX ONLINE (MERCADO PAGO)'
-                : (order.paymentMethod === 'CARTAO_ONLINE' || order.paymentDetails?.gateway === 'MERCADO_PAGO')
-                ? `CARTÃO ONLINE (${order.paymentDetails?.cardType || 'CRÉDITO'} - MERCADO PAGO)`
+              {(order.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+                order.paymentMethod === 'MERCADO_PAGO' ||
+                order.paymentMethod === 'CARTAO_ONLINE')
+                ? `MERCADO PAGO OFICIAL (${order.paymentDetails?.isPaid ? 'PAGO ✓' : 'AGUARDANDO'})`
+                : order.paymentMethod === 'PIX'
+                ? `PIX DIRETO DA LOJA (${order.paymentDetails?.isPaid ? 'PAGO ✓' : 'A CONFIRMAR'})`
                 : order.paymentMethod === 'CARTAO_ENTREGA'
                 ? `CARTÃO (${order.paymentDetails?.cardType || 'MÁQUINA'})`
                 : 'DINHEIRO'}

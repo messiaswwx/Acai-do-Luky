@@ -95,10 +95,14 @@ export function generateWhatsAppMessage(order: Order, _storePhone?: string): str
     lines.push(``);
     
     let paymentText = '';
-    if (order?.paymentMethod === 'PIX') {
-      paymentText = '⚡ Pix Online (Mercado Pago)';
-    } else if (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') {
-      paymentText = `💳 Cartão Online (${order?.paymentDetails?.cardType || 'Crédito'} - Mercado Pago)`;
+    if (
+      order?.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+      order?.paymentMethod === 'MERCADO_PAGO' ||
+      order?.paymentMethod === 'CARTAO_ONLINE'
+    ) {
+      paymentText = `💳 Mercado Pago Oficial${order?.paymentDetails?.isPaid ? ' (PAGO ✓)' : ' (Aguardando confirmação)'}`;
+    } else if (order?.paymentMethod === 'PIX') {
+      paymentText = `⚡ Pix Direto (Chave da Loja)${order?.paymentDetails?.isPaid ? ' (PAGO ✓)' : ''}`;
     } else if (order?.paymentMethod === 'CARTAO_ENTREGA') {
       paymentText = `Cartão (${order?.paymentDetails?.cardType || 'Débito/Crédito'})`;
     } else {

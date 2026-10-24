@@ -667,20 +667,8 @@ export async function confirmOrderPayment(
     // ignore
   }
 
-  // 3. Tenta RPC pública de confirmação de pagamento (se instalada no Supabase)
-  try {
-    const { data, error } = await supabase.rpc('rpc_confirm_order_payment', {
-      p_order_id: orderId,
-      p_payment_id: paymentId || null
-    });
-    if (!error && data?.success) {
-      return true;
-    }
-  } catch {
-    // fallback abaixo
-  }
-
-  // 4. Se houver sessão de admin ativa, grava 'PAGO_CONFIRMADO' diretamente no banco via rpc_admin_update_order_status
+  // 3. Se houver sessão de admin ativa (Luky), grava 'PAGO_CONFIRMADO' diretamente no banco via RPC autenticada.
+  // Pagamentos do Mercado Pago já são validados e gravados diretamente pelo servidor da Vercel (/api/mercadopago/check-payment e webhook).
   const adminToken = getAdminSessionToken();
   if (adminToken) {
     try {
