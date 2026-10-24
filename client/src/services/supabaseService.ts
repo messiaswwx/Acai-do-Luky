@@ -540,8 +540,14 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
     order.paymentMethod === 'CARTAO_ONLINE' ||
     order.paymentDetails?.gateway === 'MERCADO_PAGO';
 
-  // 'CARTAO_ONLINE' já é aceito nativamente pela função rpc_create_order do Supabase V2
-  const dbPaymentMethod: PaymentMethod = isMp ? 'CARTAO_ONLINE' : (order.paymentMethod || 'PIX');
+  // 'PIX' é aceito nativamente em todas as versões do rpc_create_order no Supabase,
+  // evitando requisição extra de fallback. A tag '[PAGAMENTO: MERCADO PAGO]' em notes
+  // preserva o método MERCADO_PAGO ao ler o pedido em parseOrderRow.
+  const dbPaymentMethod: PaymentMethod = isMp ? 'PIX' : (order.paymentMethod || 'PIX');
+  const rawOrderNotes = order.notes || '';
+  const dbNotes = isMp && !/PAGAMENTO:\s*MERCADO[_\s]PAGO/i.test(rawOrderNotes)
+    ? (rawOrderNotes ? `${rawOrderNotes} | [PAGAMENTO: MERCADO PAGO]` : '[PAGAMENTO: MERCADO PAGO]')
+    : rawOrderNotes;
 
   const payload = {
     customerName: order.customerName,
@@ -550,7 +556,7 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
     address: order.address,
     paymentMethod: dbPaymentMethod,
     paymentDetails: order.paymentDetails,
-    notes: order.notes,
+    notes: dbNotes,
     items: (order.items || []).map(item => ({
       id: item.id,
       size: { id: item.size?.id },
