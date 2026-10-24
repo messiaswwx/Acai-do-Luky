@@ -462,9 +462,16 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
 
   let { data, error } = await supabase.rpc('rpc_create_order', { p_order: payload });
 
-  // Fallback seguro caso o banco ainda não tenha a constraint atualizada para CARTAO_ONLINE
-  if (error && error.message?.includes('Forma de pagamento inválida') && payload.paymentMethod === 'CARTAO_ONLINE') {
-    payload.paymentMethod = 'CARTAO_ENTREGA' as PaymentMethod;
+  // Fallback seguro caso o banco ainda não reconheça CARTAO_ONLINE ou MERCADO_PAGO:
+  // Detecta erro tanto no objeto error do Supabase quanto no data.error retornado pela procedure
+  const isPaymentError = Boolean(
+    (error && (error.message?.includes('pagamento') || error.message?.includes('payment'))) ||
+    (data && !data.success && data.error && (data.error.includes('pagamento') || data.error.includes('payment')))
+  );
+
+  if (isPaymentError && payload.paymentMethod !== 'PIX') {
+    console.warn('Banco rejeitou forma de pagamento, aplicando fallback seguro para PIX:', error?.message || data?.error);
+    payload.paymentMethod = 'PIX' as PaymentMethod;
     const retry = await supabase.rpc('rpc_create_order', { p_order: payload });
     data = retry.data;
     error = retry.error;

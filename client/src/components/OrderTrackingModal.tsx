@@ -85,7 +85,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   };
 
   useEffect(() => {
-    const isMp = order?.paymentDetails?.gateway === 'MERCADO_PAGO' || order?.paymentMethod === 'CARTAO_ONLINE';
+    const isMp = order?.paymentDetails?.gateway === 'MERCADO_PAGO' || order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentMethod === 'MERCADO_PAGO';
     if (orderId && isMp && !order?.paymentDetails?.isPaid && !mpStatusInfo?.isPaid) {
       checkOrderPaymentStatus(orderId).then(res => {
         if (res.isPaid) {
@@ -288,7 +288,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 </p>
               </div>
 
-              {order?.paymentMethod === 'PIX' && (
+              {order?.paymentMethod === 'PIX' && order?.paymentDetails?.gateway !== 'MERCADO_PAGO' && (
                 <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-300 dark:border-amber-700 text-xs text-amber-900 dark:text-amber-200 space-y-1">
                   <p className="font-bold flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -423,7 +423,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
           )}
 
           {/* Pix Reminder if Pix was chosen and order not cancelled */}
-          {!isCancelled && order?.paymentMethod === 'PIX' && (
+          {!isCancelled && order?.paymentMethod === 'PIX' && order?.paymentDetails?.gateway !== 'MERCADO_PAGO' && (
             <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-emerald-950 dark:text-emerald-200">
                 <span>Chave Pix Instantânea:</span>
@@ -449,7 +449,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
           )}
 
           {/* Mercado Pago Official Status & Action Button */}
-          {!isCancelled && (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') && (
+          {!isCancelled && (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentMethod === 'MERCADO_PAGO' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') && (
             <div className="space-y-2">
               {order?.paymentDetails?.isPaid || mpStatusInfo?.isPaid ? (
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-3">

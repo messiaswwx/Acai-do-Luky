@@ -118,6 +118,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     try {
       const isMercadoPago = paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE';
 
+      // Usa 'PIX' como paymentMethod no banco para compatibilidade com a constraint do Supabase.
+      // A informação de que o pagamento é via Mercado Pago fica em paymentDetails.gateway.
       const orderPayload = {
         customerName: sanitizeText(customerName),
         customerPhone: sanitizePhone(customerPhone),
@@ -130,7 +132,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           reference: sanitizeText(reference)
         } : undefined,
         items,
-        paymentMethod: (isMercadoPago ? 'CARTAO_ONLINE' : 'PIX') as PaymentMethod,
+        paymentMethod: 'PIX' as PaymentMethod,
         paymentDetails: {
           gateway: isMercadoPago ? 'MERCADO_PAGO' : undefined,
           isPaid: false
@@ -139,7 +141,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         deliveryFee,
         total,
         needCutlery,
-        notes: needCutlery ? '[COM COLHER]' : '[SEM COLHER]'
+        notes: isMercadoPago
+          ? (needCutlery ? '[COM COLHER] | [PAGAMENTO: MERCADO PAGO]' : '[SEM COLHER] | [PAGAMENTO: MERCADO PAGO]')
+          : (needCutlery ? '[COM COLHER]' : '[SEM COLHER]')
       };
 
       let createdOrder: Order | null = null;
@@ -189,9 +193,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               // Redireciona diretamente para o App do Mercado Pago ou Tela Oficial
               window.location.href = pref.initPoint;
               return;
+            } else {
+              throw new Error('Não foi possível obter o link de pagamento do Mercado Pago.');
             }
-          } catch (mpErr) {
+          } catch (mpErr: any) {
             console.error('Falha ao gerar link do Mercado Pago:', mpErr);
+            setErrorMsg(mpErr?.message || 'Erro ao conectar ao Mercado Pago. Tente novamente.');
+            setIsSubmitting(false);
+            return;
           }
         }
 
