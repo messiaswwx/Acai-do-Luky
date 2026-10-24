@@ -344,7 +344,6 @@ export default function App() {
     if (typeof window !== 'undefined') {
       try {
         const params = new URLSearchParams(window.location.search);
-        const mpStatus = params.get('mp_status') || params.get('collection_status') || params.get('status');
         const orderIdFromUrl = params.get('order_id') || params.get('external_reference');
 
         if (orderIdFromUrl) {
@@ -353,16 +352,13 @@ export default function App() {
           const handleMpOrder = (order: Order | null) => {
             let sanitized = sanitizeOrder(order);
             if (sanitized) {
-              if (mpStatus === 'approved') {
-                sanitized = {
-                  ...sanitized,
-                  paymentDetails: {
-                    ...sanitized.paymentDetails,
-                    isPaid: true,
-                    mercadoPagoStatus: 'approved'
-                  }
-                };
-              }
+              sanitized = {
+                ...sanitized,
+                paymentDetails: {
+                  ...sanitized.paymentDetails,
+                  gateway: 'MERCADO_PAGO'
+                }
+              };
               setActiveOrder(sanitized);
               try {
                 localStorage.setItem('luky_cached_active_order', JSON.stringify(sanitized));
