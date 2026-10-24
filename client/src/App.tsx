@@ -1184,13 +1184,6 @@ export default function App() {
                       <Clock className="w-3.5 h-3.5 text-amber-500" />
                       <span>{activeOrder ? 'Acompanhar Pedido em Andamento' : 'Rastrear Meu Pedido'}</span>
                     </button>
-                    <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
-                    <a
-                      href="/admin"
-                      className="text-slate-500 dark:text-slate-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors text-xs py-1.5"
-                    >
-                      Área do Lojista (Painel de Pedidos)
-                    </a>
                   </div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                     © {new Date().getFullYear()} {settings.storeName} - Todos os direitos reservados.
