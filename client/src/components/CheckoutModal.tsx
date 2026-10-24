@@ -118,8 +118,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     try {
       const isMercadoPago = paymentMethod === 'MERCADO_PAGO' || paymentMethod === 'CARTAO_ONLINE';
 
-      // Usa 'PIX' como paymentMethod no banco para compatibilidade com a constraint do Supabase.
-      // A informação de que o pagamento é via Mercado Pago fica em paymentDetails.gateway.
+      // 'CARTAO_ONLINE' é aceito nativamente pela constraint do Supabase V2 para Mercado Pago.
+      // Também registramos a flag nas observações e paymentDetails.gateway para persistência total.
       const orderPayload = {
         customerName: sanitizeText(customerName),
         customerPhone: sanitizePhone(customerPhone),
@@ -132,7 +132,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           reference: sanitizeText(reference)
         } : undefined,
         items,
-        paymentMethod: 'PIX' as PaymentMethod,
+        paymentMethod: (isMercadoPago ? 'CARTAO_ONLINE' : paymentMethod) as PaymentMethod,
         paymentDetails: {
           gateway: isMercadoPago ? 'MERCADO_PAGO' : undefined,
           isPaid: false

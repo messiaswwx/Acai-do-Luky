@@ -655,9 +655,16 @@ app.patch('/api/orders/:id/status', requireAdminAuth, (req, res) => {
   db.orders[orderIndex].status = status;
   if (notes !== undefined) {
     db.orders[orderIndex].notes = notes;
-    const match = notes.match(/\[(?:RECUSADO|CANCELADO):\s*([^\]]+)\]/i);
-    if (match) {
-      db.orders[orderIndex].cancellationReason = match[1].trim();
+    if (/PAGO_CONFIRMADO/i.test(notes)) {
+      db.orders[orderIndex].paymentDetails = {
+        ...db.orders[orderIndex].paymentDetails,
+        isPaid: true
+      };
+    } else if (status === 'CANCELADO') {
+      const match = notes.match(/[\[(](?:RECUSADO|CANCELADO):\s*([^\]\)]+)[\])]/i);
+      if (match) {
+        db.orders[orderIndex].cancellationReason = match[1].trim();
+      }
     }
   }
 
@@ -676,6 +683,59 @@ app.patch('/api/orders/:id/status', requireAdminAuth, (req, res) => {
   res.json(updatedOrder);
 });
 
+// Cancelamento pelo próprio cliente (permitido apenas enquanto o status for 'NOVO')
+app.post('/api/orders/:id/cancel', (req, res) => {
+  const orderIndex = db.orders.findIndex(o => o.id === req.params.id);
+  if (orderIndex === -1) {
+    return res.status(404).json({ error: 'Pedido não encontrado' });
+  }
+
+  const currentOrder = db.orders[orderIndex];
+  if (currentOrder.status !== 'NOVO') {
+    return res.status(400).json({
+      error: 'O preparo do seu pedido já foi iniciado pela loja e não pode mais ser cancelado.'
+    });
+  }
+
+  const reason = sanitizeString(req.body?.reason, 180) || 'Cancelado pelo cliente antes do início do preparo';
+  currentOrder.status = 'CANCELADO';
+  currentOrder.cancellationReason = reason;
+  currentOrder.notes = `[CANCELADO: ${reason}]${currentOrder.notes ? ` | ${currentOrder.notes}` : ''}`;
+  currentOrder.updatedAt = new Date().toISOString();
+
+  if (Array.isArray(currentOrder.items)) {
+    adjustPackagingStock(currentOrder.items, 'RESTORE');
+  }
+
+  saveDatabase(db);
+  io.emit('order_status_updated', currentOrder);
+  io.to(`order_${currentOrder.id}`).emit('my_order_update', currentOrder);
+
+  return res.json({ success: true, order: currentOrder });
+});
+
+// Confirmação de pagamento de um pedido no banco local
+app.post('/api/orders/:id/confirm-payment', (req, res) => {
+  const orderIndex = db.orders.findIndex(o => o.id === req.params.id);
+  if (orderIndex === -1) {
+    return res.status(404).json({ error: 'Pedido não encontrado' });
+  }
+
+  const currentOrder = db.orders[orderIndex];
+  currentOrder.paymentDetails = {
+    ...currentOrder.paymentDetails,
+    isPaid: true,
+    mercadoPagoStatus: 'approved'
+  };
+  currentOrder.updatedAt = new Date().toISOString();
+
+  saveDatabase(db);
+  io.emit('order_status_updated', currentOrder);
+  io.to(`order_${currentOrder.id}`).emit('my_order_update', currentOrder);
+
+  return res.json({ success: true, order: currentOrder });
+});
+
 // ==============================================================================
 // ROTAS OFICIAIS MERCADO PAGO (CHECKOUT PRO / REDIRECIONAMENTO DE TELA E APP)
 // ==============================================================================
@@ -690,7 +750,10 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
       return res.status(400).json({ error: 'Dados do pedido ausentes' });
     }
 
-    const baseOrigin = origin || 'https://acai-do-luky.vercel.app';
+    const baseOrigin = (origin || 'https://acai-do-luky.vercel.app').replace(/\/+$/, '');
+    const webhookOrigin = baseOrigin.startsWith('https://')
+      ? baseOrigin
+      : 'https://acai-do-luky.vercel.app';
     const total = Number(order.total) || 0;
 
     const items = (Array.isArray(order.items) ? order.items : []).map(item => ({
@@ -744,6 +807,7 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
         failure: `${baseOrigin}/?mp_status=failure&order_id=${encodeURIComponent(order.id)}`
       },
       auto_return: 'approved',
+      notification_url: `${webhookOrigin}/api/mercadopago/webhook`,
       external_reference: order.id,
       statement_descriptor: 'ACAI DO LUKY',
       expires: false
@@ -776,9 +840,12 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
   }
 });
 
-app.get('/api/mercadopago/check-payment/:orderId', async (req, res) => {
+async function handleCheckPayment(req, res) {
   try {
-    const orderId = req.params.orderId;
+    const orderId = req.params.orderId || req.query.orderId || req.query.id;
+    if (!orderId) {
+      return res.status(400).json({ error: 'orderId ausente' });
+    }
     const url = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc&limit=1`;
     
     const mpRes = await fetch(url, {
@@ -832,7 +899,10 @@ app.get('/api/mercadopago/check-payment/:orderId', async (req, res) => {
     console.error('Erro ao consultar status no MP:', err);
     return res.status(500).json({ isPaid: false, status: 'error' });
   }
-});
+}
+
+app.get('/api/mercadopago/check-payment', handleCheckPayment);
+app.get('/api/mercadopago/check-payment/:orderId', handleCheckPayment);
 
 app.post('/api/mercadopago/webhook', async (req, res) => {
   try {

@@ -3,8 +3,16 @@ import type { Order, StoreSettings } from '../types';
 import { formatCurrency, formatDateTime, generateWhatsAppMessage } from '../utils/format';
 import { getSocket } from '../utils/socket';
 import { isSupabaseConfigured } from '../utils/supabase';
-import { subscribeToOrder } from '../services/supabaseService';
-import { checkOrderPaymentStatus } from '../services/mercadopagoService';
+import {
+  subscribeToOrder,
+  confirmOrderPayment,
+  cancelOrderByCustomer,
+  subscribeToOrderBroadcastEvents
+} from '../services/supabaseService';
+import {
+  checkOrderPaymentStatus,
+  createMercadoPagoPreference
+} from '../services/mercadopagoService';
 import { playCancellationAlert } from '../utils/audio';
 import { 
   CheckCircle2, 
@@ -40,6 +48,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const [order, setOrder] = useState<Order>(initialOrder || ({} as Order));
   const [copiedPix, setCopiedPix] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [isOpeningMp, setIsOpeningMp] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Quero refazer ou alterar os itens do pedido');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [mpStatusInfo, setMpStatusInfo] = useState<{ isPaid?: boolean; message?: string } | null>(() => {
     if (initialOrder?.paymentDetails?.isPaid) return { isPaid: true };
     return null;
@@ -48,7 +61,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
   useEffect(() => {
     if (initialOrder) {
-      setOrder(initialOrder);
+      setOrder(prev => ({
+        ...initialOrder,
+        paymentDetails: {
+          ...prev?.paymentDetails,
+          ...initialOrder.paymentDetails,
+          isPaid: Boolean(prev?.paymentDetails?.isPaid || initialOrder.paymentDetails?.isPaid),
+          mercadoPagoInitPoint:
+            initialOrder.paymentDetails?.mercadoPagoInitPoint ||
+            prev?.paymentDetails?.mercadoPagoInitPoint
+        }
+      }));
     }
   }, [initialOrder]);
 
@@ -56,6 +79,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   const currentStatus = order?.status || 'NOVO';
   const isCancelled = currentStatus === 'CANCELADO';
   const items = (Array.isArray(order?.items) ? order.items : []).filter(Boolean);
+  const isMpOrder =
+    order?.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+    order?.paymentMethod === 'CARTAO_ONLINE' ||
+    order?.paymentMethod === 'MERCADO_PAGO';
+  const isOrderPaid = Boolean(order?.paymentDetails?.isPaid || mpStatusInfo?.isPaid);
 
   const handleVerifyPayment = async () => {
     if (!orderId) return;
@@ -64,14 +92,23 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
       const res = await checkOrderPaymentStatus(orderId);
       if (res.isPaid) {
         setMpStatusInfo({ isPaid: true, message: 'Pagamento Aprovado no Mercado Pago! ⚡' });
-        setOrder(prev => ({
-          ...prev,
-          paymentDetails: {
-            ...prev.paymentDetails,
-            isPaid: true,
-            mercadoPagoStatus: 'approved'
-          }
-        }));
+        setOrder(prev => {
+          const next: Order = {
+            ...prev,
+            paymentDetails: {
+              ...prev.paymentDetails,
+              gateway: 'MERCADO_PAGO',
+              isPaid: true,
+              mercadoPagoStatus: 'approved',
+              mercadoPagoPaymentId: res.paymentId
+            }
+          };
+          try {
+            localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        await confirmOrderPayment(orderId, currentStatus, res.paymentId ? String(res.paymentId) : undefined);
       } else if (res.status === 'pending' || res.status === 'in_process') {
         setMpStatusInfo({ isPaid: false, message: 'Pagamento ainda em análise no Mercado Pago. Se já concluiu, aguarde alguns segundos.' });
       } else {
@@ -84,20 +121,112 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     }
   };
 
-  useEffect(() => {
-    const isMp = order?.paymentDetails?.gateway === 'MERCADO_PAGO' || order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentMethod === 'MERCADO_PAGO';
-    if (orderId && isMp && !order?.paymentDetails?.isPaid && !mpStatusInfo?.isPaid) {
-      checkOrderPaymentStatus(orderId).then(res => {
-        if (res.isPaid) {
-          setMpStatusInfo({ isPaid: true, message: 'Pagamento Aprovado no Mercado Pago!' });
-          setOrder(prev => ({
-            ...prev,
-            paymentDetails: { ...prev.paymentDetails, isPaid: true, mercadoPagoStatus: 'approved' }
-          }));
-        }
-      }).catch(() => {});
+  const handleOpenMercadoPago = async () => {
+    if (!order?.id) return;
+    if (order.paymentDetails?.mercadoPagoInitPoint) {
+      window.location.href = order.paymentDetails.mercadoPagoInitPoint;
+      return;
     }
-  }, [orderId]);
+    setIsOpeningMp(true);
+    try {
+      const pref = await createMercadoPagoPreference(order);
+      if (pref?.initPoint) {
+        setOrder(prev => {
+          const next = {
+            ...prev,
+            paymentDetails: {
+              ...prev.paymentDetails,
+              gateway: 'MERCADO_PAGO',
+              mercadoPagoPreferenceId: pref.preferenceId,
+              mercadoPagoInitPoint: pref.initPoint
+            }
+          };
+          try {
+            localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        window.location.href = pref.initPoint;
+      }
+    } catch (err: any) {
+      setMpStatusInfo({
+        isPaid: false,
+        message: err?.message || 'Não foi possível abrir o Mercado Pago agora. Tente novamente.'
+      });
+    } finally {
+      setIsOpeningMp(false);
+    }
+  };
+
+  const handleCustomerCancel = async () => {
+    if (!orderId || currentStatus !== 'NOVO') return;
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await cancelOrderByCustomer(orderId, cancelReason);
+      if (!res.success) {
+        setCancelError(res.error || 'Não foi possível cancelar o pedido.');
+        return;
+      }
+      playCancellationAlert();
+      previousStatusRef.current = 'CANCELADO';
+      setShowCancelConfirm(false);
+      setOrder(prev => {
+        const next: Order = {
+          ...prev,
+          status: 'CANCELADO',
+          cancellationReason: cancelReason
+        };
+        try {
+          localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    } catch {
+      setCancelError('Erro ao cancelar o pedido. Tente novamente.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!orderId || !isMpOrder || isCancelled || isOrderPaid) return;
+
+    let cancelled = false;
+    const checkNow = () => {
+      checkOrderPaymentStatus(orderId)
+        .then(res => {
+          if (!cancelled && res.isPaid) {
+            setMpStatusInfo({ isPaid: true, message: 'Pagamento Aprovado no Mercado Pago! ⚡' });
+            setOrder(prev => {
+              const next: Order = {
+                ...prev,
+                paymentDetails: {
+                  ...prev.paymentDetails,
+                  gateway: 'MERCADO_PAGO',
+                  isPaid: true,
+                  mercadoPagoStatus: 'approved',
+                  mercadoPagoPaymentId: res.paymentId
+                }
+              };
+              try {
+                localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+            confirmOrderPayment(orderId, currentStatus, res.paymentId ? String(res.paymentId) : undefined);
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkNow();
+    const interval = setInterval(checkNow, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [orderId, isMpOrder, isCancelled, isOrderPaid, currentStatus]);
 
   useEffect(() => {
     if (!orderId) return;
@@ -110,7 +239,29 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
             playCancellationAlert();
           }
           previousStatusRef.current = updated.status;
-          setOrder(updated);
+          setOrder(prev => {
+            const mergedPaid = Boolean(
+              prev?.paymentDetails?.isPaid || updated.paymentDetails?.isPaid
+            );
+            if (mergedPaid) {
+              setMpStatusInfo({ isPaid: true, message: 'Pagamento Confirmado! ⚡' });
+            }
+            const next: Order = {
+              ...updated,
+              paymentDetails: {
+                ...prev?.paymentDetails,
+                ...updated.paymentDetails,
+                isPaid: mergedPaid,
+                mercadoPagoInitPoint:
+                  updated.paymentDetails?.mercadoPagoInitPoint ||
+                  prev?.paymentDetails?.mercadoPagoInitPoint
+              }
+            };
+            try {
+              localStorage.setItem('luky_cached_active_order', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
         }
       } catch (err) {
         console.warn('Erro ao processar atualização do pedido:', err);
@@ -134,9 +285,30 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
     // Supabase Realtime (para funcionamento em produção na Vercel)
     let unsubSupabase = () => {};
+    let unsubBroadcast = () => {};
     if (isSupabaseConfigured) {
       try {
         unsubSupabase = subscribeToOrder(orderId, handleOrderUpdate);
+        unsubBroadcast = subscribeToOrderBroadcastEvents({
+          onOrderPaid: payload => {
+            if (payload.orderId === orderId) {
+              setMpStatusInfo({ isPaid: true, message: 'Pagamento Confirmado! ⚡' });
+              setOrder(prev => ({
+                ...prev,
+                paymentDetails: { ...prev.paymentDetails, isPaid: true }
+              }));
+            }
+          },
+          onCustomerCancelled: payload => {
+            if (payload.orderId === orderId) {
+              setOrder(prev => ({
+                ...prev,
+                status: 'CANCELADO',
+                cancellationReason: payload.reason
+              }));
+            }
+          }
+        });
       } catch (e) {
         console.warn('Erro ao assinar Supabase realtime para pedido:', e);
       }
@@ -145,6 +317,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     return () => {
       socketCleanup();
       unsubSupabase();
+      unsubBroadcast();
     };
   }, [orderId]);
 
@@ -423,35 +596,54 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
           )}
 
           {/* Pix Reminder if Pix was chosen and order not cancelled */}
-          {!isCancelled && order?.paymentMethod === 'PIX' && order?.paymentDetails?.gateway !== 'MERCADO_PAGO' && (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                <span>Chave Pix Instantânea:</span>
-                <span className="font-black text-emerald-800 dark:text-emerald-300">Total: {formatCurrency(order?.total || 0)}</span>
+          {!isCancelled && !isMpOrder && order?.paymentMethod === 'PIX' && (
+            isOrderPaid ? (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Check className="w-6 h-6 stroke-[3]" />
+                </div>
+                <div>
+                  <span className="font-black text-emerald-950 dark:text-emerald-200 text-xs block">
+                    Pagamento Pix Confirmado pela Loja! ⚡
+                  </span>
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                    Recebemos seu Pix com sucesso. Seu açaí já está liberado para preparo!
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={settings?.pixKey || ''}
-                  className="flex-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200 font-mono text-xs p-2 rounded-xl font-bold"
-                />
-                <button
-                  type="button"
-                  onClick={copyPixKey}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-xl font-black flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedPix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedPix ? 'Copiado' : 'Copiar'}</span>
-                </button>
+            ) : (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                  <span>Chave Pix Instantânea:</span>
+                  <span className="font-black text-emerald-800 dark:text-emerald-300">Total: {formatCurrency(order?.total || 0)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={settings?.pixKey || ''}
+                    className="flex-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200 font-mono text-xs p-2 rounded-xl font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyPixKey}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-xl font-black flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedPix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedPix ? 'Copiado' : 'Copiar'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium">
+                  Assim que realizar o Pix, o Luky confirmará o recebimento para iniciar o preparo do seu açaí.
+                </p>
               </div>
-            </div>
+            )
           )}
 
           {/* Mercado Pago Official Status & Action Button */}
-          {!isCancelled && (order?.paymentMethod === 'CARTAO_ONLINE' || order?.paymentMethod === 'MERCADO_PAGO' || order?.paymentDetails?.gateway === 'MERCADO_PAGO') && (
+          {!isCancelled && isMpOrder && (
             <div className="space-y-2">
-              {order?.paymentDetails?.isPaid || mpStatusInfo?.isPaid ? (
+              {isOrderPaid ? (
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
                     <Check className="w-6 h-6 stroke-[3]" />
@@ -461,7 +653,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                       Pagamento Aprovado no Mercado Pago! ⚡
                     </span>
                     <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
-                      Confirmado com sucesso. Seu açaí já está sendo preparado!
+                      Confirmado com sucesso! O Luky já foi avisado para preparar seu açaí.
                     </span>
                   </div>
                 </div>
@@ -477,18 +669,24 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                     </span>
                   </div>
 
-                  {order?.paymentDetails?.mercadoPagoInitPoint && (
-                    <a
-                      href={order.paymentDetails.mercadoPagoInitPoint}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-blue-700 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md shadow-blue-500/25 transition-all cursor-pointer"
-                    >
-                      <Smartphone className="w-4 h-4 text-amber-300" />
-                      <span>Abrir Tela Oficial / App do Mercado Pago</span>
-                      <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                    </a>
-                  )}
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                    O preparo do seu açaí será liberado assim que o pagamento for confirmado no Mercado Pago.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenMercadoPago}
+                    disabled={isOpeningMp}
+                    className="w-full bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-blue-700 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md shadow-blue-500/25 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <Smartphone className="w-4 h-4 text-amber-300" />
+                    <span>
+                      {isOpeningMp
+                        ? 'Abrindo Mercado Pago...'
+                        : 'Abrir Tela Oficial / App do Mercado Pago'}
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                  </button>
 
                   <button
                     type="button"
@@ -529,6 +727,105 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
               <MessageCircle className="w-5 h-5" />
               <span>Enviar resumo / Falar no WhatsApp</span>
             </button>
+          )}
+
+          {/* Opção de Cancelamento pelo Cliente (apenas quando o Luky ainda NÃO iniciou o preparo) */}
+          {!isCancelled && currentStatus === 'NOVO' && (
+            <div className="pt-1">
+              {!showCancelConfirm ? (
+                <div className="p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-bold text-rose-950 dark:text-rose-200 block">
+                      Precisa desistir ou alterar o pedido?
+                    </span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                      Como o Luky ainda não iniciou o preparo, você pode cancelar agora.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelError(null);
+                      setShowCancelConfirm(true);
+                    }}
+                    className="shrink-0 w-full sm:w-auto px-3.5 py-2 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-black text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Cancelar Pedido</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl border-2 border-rose-400 dark:border-rose-700 bg-rose-50/90 dark:bg-rose-950/40 space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h5 className="text-xs font-black text-rose-950 dark:text-rose-200 uppercase">
+                        Confirmar Cancelamento do Pedido
+                      </h5>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-0.5">
+                        Selecione o motivo do cancelamento:
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {[
+                      'Quero refazer ou alterar os itens do pedido',
+                      'Escolhi a forma de pagamento ou endereço errado',
+                      'Desisti da compra no momento'
+                    ].map(reasonOption => (
+                      <button
+                        key={reasonOption}
+                        type="button"
+                        onClick={() => setCancelReason(reasonOption)}
+                        className={`text-left text-xs px-3 py-2 rounded-xl border font-bold transition-all cursor-pointer ${
+                          cancelReason === reasonOption
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-rose-200 dark:border-rose-800/80 hover:bg-rose-100/50'
+                        }`}
+                      >
+                        {reasonOption}
+                      </button>
+                    ))}
+                  </div>
+
+                  {cancelError && (
+                    <p className="text-xs font-bold text-red-600 dark:text-red-400 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-red-300">
+                      {cancelError}
+                    </p>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowCancelConfirm(false)}
+                      disabled={isCancelling}
+                      className="flex-1 py-2.5 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCustomerCancel}
+                      disabled={isCancelling}
+                      className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-60"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>{isCancelling ? 'Cancelando...' : 'Sim, Cancelar Pedido'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Aviso quando o preparo já começou (cancelamento bloqueado) */}
+          {!isCancelled && currentStatus !== 'NOVO' && (
+            <div className="p-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-800/50 text-center">
+              <p className="text-[11px] font-bold text-purple-900 dark:text-purple-300">
+                🍧 O Luky já iniciou o preparo do seu pedido! A partir desta etapa o cancelamento pelo site fica desativado.
+              </p>
+            </div>
           )}
 
           {/* Resumo dos Itens */}

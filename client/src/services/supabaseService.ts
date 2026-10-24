@@ -323,18 +323,113 @@ export function subscribeToMenuData(onUpdate: (menu: MenuData) => void) {
 }
 
 // ==============================================================================
-// PEDIDOS (ORDERS)
+// PEDIDOS (ORDERS) & SINCRONIZAÇÃO DE PAGAMENTO / CANCELAMENTO
 // ==============================================================================
 
-export function parseOrderRow(row: any): Order {
-  const rawNotes = row.notes || '';
-  let cancellationReason: string | undefined = undefined;
-  let cleanNotes = rawNotes;
+const PAID_ORDERS_CACHE_KEY = 'luky_paid_orders_cache';
+const CANCELLED_ORDERS_CACHE_KEY = 'luky_cancelled_orders_cache';
 
-  const match = rawNotes.match(/\[(?:RECUSADO|CANCELADO):\s*([^\]]+)\]/i);
-  if (match) {
-    cancellationReason = match[1].trim();
-    cleanNotes = rawNotes.replace(/\[(?:RECUSADO|CANCELADO):\s*[^\]]+\]\s*(\|\s*)?/i, '').trim();
+export function markOrderPaidLocally(orderId: string) {
+  if (!orderId) return;
+  try {
+    const raw = localStorage.getItem(PAID_ORDERS_CACHE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[orderId] = true;
+    localStorage.setItem(PAID_ORDERS_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function isOrderPaidLocally(orderId: string): boolean {
+  if (!orderId) return false;
+  try {
+    const raw = localStorage.getItem(PAID_ORDERS_CACHE_KEY);
+    if (!raw) return false;
+    const map = JSON.parse(raw);
+    return Boolean(map && map[orderId]);
+  } catch {
+    return false;
+  }
+}
+
+export function markOrderCancelledLocally(orderId: string, reason: string) {
+  if (!orderId) return;
+  try {
+    const raw = localStorage.getItem(CANCELLED_ORDERS_CACHE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[orderId] = reason || 'Cancelado pelo cliente antes do preparo';
+    localStorage.setItem(CANCELLED_ORDERS_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getLocalOrderCancellation(orderId: string): string | undefined {
+  if (!orderId) return undefined;
+  try {
+    const raw = localStorage.getItem(CANCELLED_ORDERS_CACHE_KEY);
+    if (!raw) return undefined;
+    const map = JSON.parse(raw);
+    return map?.[orderId] || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseOrderRow(row: any): Order {
+  const rawNotes = String(row.notes || '');
+
+  // 1. Detecta confirmação de pagamento (via coluna, tag em notes ou cache local)
+  const hasPaidTag = /PAGO_CONFIRMADO|MP_PAGO|PAGAMENTO_APROVADO/i.test(rawNotes);
+  const isPaid = Boolean(
+    row.is_paid ||
+    row.paymentDetails?.isPaid ||
+    hasPaidTag ||
+    isOrderPaidLocally(row.id)
+  );
+  if (hasPaidTag || row.is_paid) {
+    markOrderPaidLocally(row.id);
+  }
+
+  // Remove marcadores de pagamento das notes antes de procurar motivo de cancelamento
+  let workingNotes = rawNotes
+    .replace(/[[(](?:RECUSADO|CANCELADO):\s*PAGO_CONFIRMADO[^\])]*[\])]\s*(\|\s*)?/gi, '')
+    .replace(/[[(]?(?:PAGO_CONFIRMADO|MP_PAGO|PAGAMENTO_APROVADO)(?::\s*[^\])|]+)?[\])]?\s*(\|\s*)?/gi, '')
+    .trim();
+
+  // 2. Detecta motivo de recusa ou cancelamento (tanto com [ ] quanto com ( ))
+  let cancellationReason: string | undefined = undefined;
+  const cancelMatch = workingNotes.match(/[[(](?:RECUSADO|CANCELADO(?:\s+PELO\s+CLIENTE)?):\s*([^\])]+)[\])]/i);
+  if (cancelMatch) {
+    cancellationReason = cancelMatch[1].trim();
+    workingNotes = workingNotes
+      .replace(/[[(](?:RECUSADO|CANCELADO(?:\s+PELO\s+CLIENTE)?):\s*[^\])]+[\])]\s*(\|\s*)?/gi, '')
+      .trim();
+  }
+
+  // 3. Detecta se o pedido é do Mercado Pago (pelo payment_method ou pela tag nas notes)
+  const hasMpTag = /PAGAMENTO:\s*MERCADO[_\s]PAGO/i.test(rawNotes);
+  const isMpMethod =
+    row.payment_method === 'MERCADO_PAGO' ||
+    row.payment_method === 'CARTAO_ONLINE' ||
+    row.payment_method === 'MERCADO_PAGO_PIX' ||
+    row.payment_method === 'MERCADO_PAGO_CARTAO';
+  const isMercadoPago = Boolean(hasMpTag || isMpMethod || row.paymentDetails?.gateway === 'MERCADO_PAGO');
+
+  // Limpa tags internas de pagamento das observações visíveis
+  const cleanNotes = workingNotes
+    .replace(/[[(]?PAGAMENTO:\s*MERCADO[_\s]PAGO[\])]?\s*(\|\s*)?/gi, '')
+    .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
+    .trim();
+
+  // Verifica se houve cancelamento solicitado pelo cliente enquanto estava 'NOVO'
+  const localCancelReason = getLocalOrderCancellation(row.id);
+  const effectiveStatus = (
+    row.status === 'NOVO' && localCancelReason ? 'CANCELADO' : (row.status || 'NOVO')
+  ) as OrderStatus;
+  if (effectiveStatus === 'CANCELADO' && !cancellationReason && localCancelReason) {
+    cancellationReason = localCancelReason;
   }
 
   let parsedItems: any[] = [];
@@ -368,21 +463,26 @@ export function parseOrderRow(row: any): Order {
 
   return {
     id: row.id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    status: (row.status || 'NOVO') as OrderStatus,
-    customerName: row.customer_name || 'Cliente',
-    customerPhone: row.customer_phone || '',
-    orderType: row.delivery_type || 'ENTREGA',
+    createdAt: row.created_at || row.createdAt,
+    updatedAt: row.updated_at || row.updatedAt,
+    status: effectiveStatus,
+    customerName: row.customer_name || row.customerName || 'Cliente',
+    customerPhone: row.customer_phone || row.customerPhone || '',
+    orderType: row.delivery_type || row.orderType || 'ENTREGA',
     address: parsedAddress,
-    paymentMethod: row.payment_method || 'PIX',
-    paymentDetails: row.change_for ? { changeFor: Number(row.change_for) } : undefined,
+    paymentMethod: (isMercadoPago ? 'MERCADO_PAGO' : (row.payment_method || row.paymentMethod || 'PIX')) as PaymentMethod,
+    paymentDetails: {
+      ...(row.change_for ? { changeFor: Number(row.change_for), needChange: true } : {}),
+      ...(row.paymentDetails || {}),
+      ...(isMercadoPago ? { gateway: 'MERCADO_PAGO' } : {}),
+      isPaid
+    },
     items: parsedItems,
     subtotal: Number(row.subtotal) || 0,
-    deliveryFee: Number(row.delivery_fee) || 0,
+    deliveryFee: Number(row.delivery_fee ?? row.deliveryFee) || 0,
     total: Number(row.total) || 0,
     notes: cleanNotes || undefined,
-    needCutlery: row.need_cutlery ?? (rawNotes.includes('SEM COLHER') ? false : true),
+    needCutlery: row.need_cutlery ?? row.needCutlery ?? (/SEM COLHER/i.test(rawNotes) ? false : true),
     cancellationReason
   };
 }
@@ -435,12 +535,20 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
     throw new Error('Banco de dados não configurado.');
   }
 
+  const isMp =
+    order.paymentMethod === 'MERCADO_PAGO' ||
+    order.paymentMethod === 'CARTAO_ONLINE' ||
+    order.paymentDetails?.gateway === 'MERCADO_PAGO';
+
+  // 'CARTAO_ONLINE' já é aceito nativamente pela função rpc_create_order do Supabase V2
+  const dbPaymentMethod: PaymentMethod = isMp ? 'CARTAO_ONLINE' : (order.paymentMethod || 'PIX');
+
   const payload = {
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     orderType: order.orderType,
     address: order.address,
-    paymentMethod: order.paymentMethod,
+    paymentMethod: dbPaymentMethod,
     paymentDetails: order.paymentDetails,
     notes: order.notes,
     items: (order.items || []).map(item => ({
@@ -462,8 +570,7 @@ export async function createOrder(order: Partial<Order> & { notes?: string }): P
 
   let { data, error } = await supabase.rpc('rpc_create_order', { p_order: payload });
 
-  // Fallback seguro caso o banco ainda não reconheça CARTAO_ONLINE ou MERCADO_PAGO:
-  // Detecta erro tanto no objeto error do Supabase quanto no data.error retornado pela procedure
+  // Fallback seguro caso o banco tenha constraint antiga:
   const isPaymentError = Boolean(
     (error && (error.message?.includes('pagamento') || error.message?.includes('payment'))) ||
     (data && !data.success && data.error && (data.error.includes('pagamento') || data.error.includes('payment')))
@@ -515,6 +622,217 @@ export async function updateOrderStatus(
     console.error('Exceção ao atualizar status:', err);
     return false;
   }
+}
+
+/**
+ * Registra e propaga em tempo real que o pagamento do pedido foi confirmado.
+ * Funciona tanto com a RPC dedicada quanto com a RPC administrativa já instalada no banco.
+ */
+export async function confirmOrderPayment(
+  orderId: string,
+  currentStatus: OrderStatus = 'NOVO',
+  paymentId?: string
+): Promise<boolean> {
+  if (!orderId) return false;
+  markOrderPaidLocally(orderId);
+
+  // 1. Tenta atualizar no backend local se estiver disponível
+  try {
+    fetch(`/api/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId })
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  if (!isSupabaseConfigured || !supabase) return true;
+
+  // 2. Dispara broadcast em tempo real para todos os clientes/painel conectados
+  try {
+    const ch = supabase.channel('luky_order_events');
+    ch.subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({
+          type: 'broadcast',
+          event: 'order_paid',
+          payload: { orderId, paymentId }
+        }).finally(() => {
+          setTimeout(() => supabase?.removeChannel(ch), 1500);
+        });
+      }
+    });
+  } catch {
+    // ignore
+  }
+
+  // 3. Tenta RPC pública de confirmação de pagamento (se instalada no Supabase)
+  try {
+    const { data, error } = await supabase.rpc('rpc_confirm_order_payment', {
+      p_order_id: orderId,
+      p_payment_id: paymentId || null
+    });
+    if (!error && data?.success) {
+      return true;
+    }
+  } catch {
+    // fallback abaixo
+  }
+
+  // 4. Se houver sessão de admin ativa, grava 'PAGO_CONFIRMADO' diretamente no banco via rpc_admin_update_order_status
+  const adminToken = getAdminSessionToken();
+  if (adminToken) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_admin_update_order_status', {
+        p_session_token: adminToken,
+        p_order_id: orderId,
+        p_status: currentStatus,
+        p_reason: 'PAGO_CONFIRMADO'
+      });
+      if (!error && data?.success) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Permite ao cliente cancelar seu próprio pedido APENAS enquanto o status ainda for 'NOVO'
+ * (antes de o Luky iniciar o preparo).
+ */
+export async function cancelOrderByCustomer(
+  orderId: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!orderId) {
+    return { success: false, error: 'Pedido inválido.' };
+  }
+
+  const finalReason = (reason || 'Cancelado pelo cliente antes do início do preparo').trim();
+
+  // 1. Verifica status atual no Supabase para garantir que o preparo ainda não começou
+  if (isSupabaseConfigured && supabase) {
+    const latest = await fetchOrderById(orderId);
+    if (latest && latest.status !== 'NOVO' && latest.status !== 'CANCELADO') {
+      return {
+        success: false,
+        error: 'O Luky já iniciou o preparo do seu pedido! Não é mais possível cancelar automaticamente.'
+      };
+    }
+  }
+
+  // 2. Tenta cancelar no backend local (se em execução)
+  try {
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: finalReason })
+    });
+    if (res.status === 400) {
+      const errData = await res.json().catch(() => ({}));
+      if (errData?.error) {
+        return { success: false, error: errData.error };
+      }
+    }
+  } catch {
+    // Continua via Supabase
+  }
+
+  markOrderCancelledLocally(orderId, finalReason);
+
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: true };
+  }
+
+  // 3. Tenta RPC dedicada rpc_customer_cancel_order no Supabase
+  let persistedInDb = false;
+  try {
+    const { data, error } = await supabase.rpc('rpc_customer_cancel_order', {
+      p_order_id: orderId,
+      p_reason: finalReason
+    });
+    if (!error && data?.success) {
+      persistedInDb = true;
+    } else if (data && data.success === false && data.error) {
+      return { success: false, error: data.error };
+    }
+  } catch {
+    // fallback abaixo
+  }
+
+  // 4. Se houver sessão de admin ativa no mesmo navegador, persiste diretamente no banco
+  const adminToken = getAdminSessionToken();
+  if (!persistedInDb && adminToken) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_admin_update_order_status', {
+        p_session_token: adminToken,
+        p_order_id: orderId,
+        p_status: 'CANCELADO',
+        p_reason: `Cancelado pelo cliente: ${finalReason}`
+      });
+      if (!error && data?.success) {
+        persistedInDb = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 5. Envia evento em tempo real via Supabase Broadcast para o Painel do Luky atualizar imediatamente
+  try {
+    const ch = supabase.channel('luky_order_events');
+    ch.subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({
+          type: 'broadcast',
+          event: 'customer_cancelled_order',
+          payload: { orderId, reason: `Cancelado pelo cliente: ${finalReason}` }
+        }).finally(() => {
+          setTimeout(() => supabase?.removeChannel(ch), 1500);
+        });
+      }
+    });
+  } catch {
+    // ignore
+  }
+
+  return { success: true };
+}
+
+/**
+ * Assina eventos instantâneos de pagamento e cancelamento de clientes via Supabase Broadcast.
+ */
+export function subscribeToOrderBroadcastEvents(handlers: {
+  onOrderPaid?: (payload: { orderId: string; paymentId?: string }) => void;
+  onCustomerCancelled?: (payload: { orderId: string; reason: string }) => void;
+}) {
+  const client = supabase;
+  if (!isSupabaseConfigured || !client) return () => {};
+
+  const channel = client
+    .channel('luky_order_events')
+    .on('broadcast', { event: 'order_paid' }, ({ payload }) => {
+      if (payload?.orderId) {
+        markOrderPaidLocally(payload.orderId);
+        handlers.onOrderPaid?.(payload);
+      }
+    })
+    .on('broadcast', { event: 'customer_cancelled_order' }, ({ payload }) => {
+      if (payload?.orderId) {
+        markOrderCancelledLocally(payload.orderId, payload.reason || 'Cancelado pelo cliente');
+        handlers.onCustomerCancelled?.(payload);
+      }
+    })
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
 }
 
 // ==============================================================================
@@ -626,7 +944,7 @@ export function subscribeToOrders(
     try {
       const orders = await fetchOrders();
       for (const order of orders.slice().reverse()) {
-        const fingerprint = `${order.status}|${order.updatedAt || ''}|${order.notes || ''}|${order.cancellationReason || ''}`;
+        const fingerprint = `${order.status}|${order.updatedAt || ''}|${Boolean(order.paymentDetails?.isPaid)}|${order.notes || ''}|${order.cancellationReason || ''}`;
         const previous = known.get(order.id);
         if (previous === undefined) {
           known.set(order.id, fingerprint);
@@ -656,7 +974,7 @@ export function subscribeToOrder(
   const refresh = async () => {
     const order = await fetchOrderById(orderId);
     if (!order) return;
-    const fingerprint = `${order.status}|${order.updatedAt || ''}|${order.cancellationReason || ''}`;
+    const fingerprint = `${order.status}|${order.updatedAt || ''}|${Boolean(order.paymentDetails?.isPaid)}|${order.cancellationReason || ''}`;
     if (fingerprint !== lastFingerprint) {
       const isFirst = lastFingerprint === '';
       lastFingerprint = fingerprint;

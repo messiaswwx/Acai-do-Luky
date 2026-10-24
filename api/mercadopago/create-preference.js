@@ -1,12 +1,16 @@
 // Vercel Serverless Function: Criação de Preferência de Pagamento Mercado Pago
-const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || process.env.VITE_MP_ACCESS_TOKEN || 'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
+const MP_ACCESS_TOKEN =
+  process.env.MP_ACCESS_TOKEN ||
+  'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -23,7 +27,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Dados do pedido ausentes' });
     }
 
-    const baseOrigin = origin || req.headers.origin || 'https://acai-do-luky.vercel.app';
+    const baseOrigin = (origin || req.headers.origin || 'https://acai-do-luky.vercel.app').replace(/\/+$/, '');
+    const webhookOrigin = baseOrigin.startsWith('https://')
+      ? baseOrigin
+      : 'https://acai-do-luky.vercel.app';
     const total = Number(order.total) || 0;
 
     const items = (Array.isArray(order.items) ? order.items : []).map(item => ({
@@ -46,17 +53,20 @@ export default async function handler(req, res) {
       });
     }
 
-    const calculatedTotal = items.reduce((acc, i) => acc + (i.unit_price * i.quantity), 0);
-    const finalItems = Math.abs(calculatedTotal - total) < 0.05 ? items : [
-      {
-        id: order.id,
-        title: `Pedido ${order.id} - Açaí do Luky`,
-        description: 'Açaí artesanal montado com acompanhamentos',
-        quantity: 1,
-        currency_id: 'BRL',
-        unit_price: total
-      }
-    ];
+    const calculatedTotal = items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
+    const finalItems =
+      Math.abs(calculatedTotal - total) < 0.05
+        ? items
+        : [
+            {
+              id: order.id,
+              title: `Pedido ${order.id} - Açaí do Luky`,
+              description: 'Açaí artesanal montado com acompanhamentos',
+              quantity: 1,
+              currency_id: 'BRL',
+              unit_price: total
+            }
+          ];
 
     const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
     const areaCode = cleanPhone.length >= 10 ? cleanPhone.substring(0, 2) : '13';
@@ -77,6 +87,7 @@ export default async function handler(req, res) {
         failure: `${baseOrigin}/?mp_status=failure&order_id=${encodeURIComponent(order.id)}`
       },
       auto_return: 'approved',
+      notification_url: `${webhookOrigin}/api/mercadopago/webhook`,
       external_reference: order.id,
       statement_descriptor: 'ACAI DO LUKY',
       expires: false
@@ -85,7 +96,7 @@ export default async function handler(req, res) {
     const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(preferencePayload)

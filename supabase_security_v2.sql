@@ -851,7 +851,7 @@ BEGIN
   IF v_type NOT IN ('ENTREGA','RETIRADA') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Tipo de pedido inválido.');
   END IF;
-  IF v_payment NOT IN ('PIX','CARTAO_ONLINE','MERCADO_PAGO_PIX','MERCADO_PAGO_CARTAO','CARTAO_ENTREGA','DINHEIRO') THEN
+  IF v_payment NOT IN ('PIX','MERCADO_PAGO','CARTAO_ONLINE','MERCADO_PAGO_PIX','MERCADO_PAGO_CARTAO','CARTAO_ENTREGA','DINHEIRO') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Forma de pagamento inválida.');
   END IF;
 
@@ -1042,6 +1042,92 @@ BEGIN
     RETURN NULL;
   END IF;
   RETURN to_jsonb(v_row);
+END;
+$$;
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT false;
+
+-- Confirmação de pagamento (Webhook MP / Verificação Oficial)
+CREATE OR REPLACE FUNCTION public.rpc_confirm_order_payment(
+  p_order_id TEXT,
+  p_payment_id TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_notes TEXT;
+BEGIN
+  IF p_order_id IS NULL OR length(p_order_id) > 40 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Pedido inválido.');
+  END IF;
+
+  SELECT * INTO v_order FROM public.orders WHERE id = p_order_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Pedido não encontrado.');
+  END IF;
+
+  v_notes := COALESCE(v_order.notes, '');
+  IF v_notes !~* 'PAGO_CONFIRMADO' THEN
+    v_notes := '[PAGO_CONFIRMADO]' || CASE WHEN TRIM(v_notes) <> '' THEN ' | ' || TRIM(v_notes) ELSE '' END;
+  END IF;
+
+  UPDATE public.orders
+  SET is_paid = true, notes = v_notes, updated_at = NOW()
+  WHERE id = p_order_id;
+
+  RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- Cancelamento pelo próprio cliente (permitido APENAS enquanto status = 'NOVO')
+CREATE OR REPLACE FUNCTION public.rpc_customer_cancel_order(
+  p_order_id TEXT,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_notes TEXT;
+  v_reason TEXT := COALESCE(public._clean_text(replace(replace(COALESCE(p_reason, ''), '[', ''), ']', ''), 180), 'Cancelado pelo cliente antes do início do preparo');
+BEGIN
+  IF p_order_id IS NULL OR length(p_order_id) > 40 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Pedido inválido.');
+  END IF;
+
+  SELECT * INTO v_order FROM public.orders
+  WHERE id = p_order_id AND created_at > NOW() - INTERVAL '24 hours'
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Pedido não encontrado.');
+  END IF;
+
+  IF v_order.status = 'CANCELADO' THEN
+    RETURN jsonb_build_object('success', true);
+  END IF;
+
+  IF v_order.status <> 'NOVO' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'O Luky já iniciou o preparo do seu pedido! Não é mais possível cancelar automaticamente.');
+  END IF;
+
+  v_notes := regexp_replace(COALESCE(v_order.notes, ''), '\[(RECUSADO|CANCELADO):\s*[^\]]+\]\s*(\|\s*)?', '', 'gi');
+  v_notes := '[CANCELADO: ' || v_reason || ']' || CASE WHEN TRIM(v_notes) <> '' THEN ' | ' || TRIM(v_notes) ELSE '' END;
+
+  PERFORM public._adjust_packaging(v_order.items, 1);
+
+  UPDATE public.orders
+  SET status = 'CANCELADO', notes = v_notes, updated_at = NOW()
+  WHERE id = p_order_id;
+
+  RETURN jsonb_build_object('success', true);
 END;
 $$;
 
@@ -1285,6 +1371,8 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_set_inventory_quantity(TEXT, TEXT, NU
 GRANT EXECUTE ON FUNCTION public.rpc_admin_upsert_inventory_item(TEXT, JSONB)     TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_create_order(JSONB)                          TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_get_order(TEXT)                              TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_confirm_order_payment(TEXT, TEXT)            TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_customer_cancel_order(TEXT, TEXT)            TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_register(TEXT, TEXT, TEXT, JSONB)   TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_login(TEXT, TEXT)                   TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_customer_logout(TEXT)                        TO anon, authenticated;

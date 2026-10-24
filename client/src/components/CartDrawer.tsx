@@ -20,12 +20,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onProceedToCheckout
 }) => {
-  if (!isOpen) return null;
-
   const subtotal = useMemo(
     () => items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0),
     [items]
   );
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">

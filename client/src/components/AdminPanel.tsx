@@ -12,8 +12,11 @@ import {
   fetchInventory,
   updateInventoryQuantity,
   saveInventoryItem,
-  subscribeToInventory
+  subscribeToInventory,
+  confirmOrderPayment,
+  subscribeToOrderBroadcastEvents
 } from '../services/supabaseService';
+import { checkOrderPaymentStatus } from '../services/mercadopagoService';
 import { PrintReceipt } from './PrintReceipt';
 import { 
   Bell, 
@@ -44,7 +47,8 @@ import {
   AlertTriangle,
   PackageCheck,
   Sparkles,
-  Pencil
+  Pencil,
+  Lock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from './ThemeToggle';
@@ -146,8 +150,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const [checkingPaymentOrderId, setCheckingPaymentOrderId] = useState<string | null>(null);
   const soundEnabledRef = useRef(soundEnabled);
-  soundEnabledRef.current = soundEnabled;
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   useEffect(() => {
     loadOrders();
@@ -164,7 +171,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     const handleOrderStatus = (updated: Order) => {
-      setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === updated.id
+            ? {
+                ...updated,
+                paymentDetails: {
+                  ...o.paymentDetails,
+                  ...updated.paymentDetails,
+                  isPaid: Boolean(o.paymentDetails?.isPaid || updated.paymentDetails?.isPaid)
+                }
+              }
+            : o
+        )
+      );
     };
 
     // Socket.IO local
@@ -175,6 +195,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // Supabase Realtime (se configurado)
     let unsubscribeSupabase = () => {};
     let unsubscribeInventory = () => {};
+    let unsubscribeBroadcast = () => {};
     if (isSupabaseConfigured) {
       unsubscribeSupabase = subscribeToOrders(
         (newOrder) => handleNewOrder(newOrder),
@@ -190,6 +211,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           return [...prev, updatedItem];
         });
       });
+
+      unsubscribeBroadcast = subscribeToOrderBroadcastEvents({
+        onOrderPaid: payload => {
+          setOrders(prev => {
+            const found = prev.find(o => o.id === payload.orderId);
+            if (found && !found.paymentDetails?.isPaid) {
+              confirmOrderPayment(payload.orderId, found.status, payload.paymentId);
+            }
+            return prev.map(o =>
+              o.id === payload.orderId
+                ? {
+                    ...o,
+                    paymentDetails: { ...o.paymentDetails, isPaid: true }
+                  }
+                : o
+            );
+          });
+        },
+        onCustomerCancelled: payload => {
+          setOrders(prev => {
+            const found = prev.find(o => o.id === payload.orderId);
+            if (found && found.status === 'NOVO') {
+              updateSupabaseOrderStatus(payload.orderId, 'CANCELADO', payload.reason);
+            }
+            return prev.map(o =>
+              o.id === payload.orderId && o.status === 'NOVO'
+                ? {
+                    ...o,
+                    status: 'CANCELADO',
+                    cancellationReason: payload.reason
+                  }
+                : o
+            );
+          });
+        }
+      });
     }
 
     return () => {
@@ -197,10 +254,96 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       socket.off('order_status_updated', handleOrderStatus);
       unsubscribeSupabase();
       unsubscribeInventory();
+      unsubscribeBroadcast();
     };
   }, []);
 
+  // Verificação automática em segundo plano no Mercado Pago para pedidos NOVO pendentes
+  useEffect(() => {
+    const checkPendingMpOrders = async () => {
+      const pendingMp = orders.filter(o => {
+        const isMp =
+          o.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+          o.paymentMethod === 'CARTAO_ONLINE' ||
+          o.paymentMethod === 'MERCADO_PAGO';
+        return o.status === 'NOVO' && isMp && !o.paymentDetails?.isPaid;
+      });
+
+      for (const ord of pendingMp) {
+        try {
+          const res = await checkOrderPaymentStatus(ord.id);
+          if (res.isPaid) {
+            setOrders(prev =>
+              prev.map(o =>
+                o.id === ord.id
+                  ? {
+                      ...o,
+                      paymentDetails: {
+                        ...o.paymentDetails,
+                        gateway: 'MERCADO_PAGO',
+                        isPaid: true,
+                        mercadoPagoStatus: 'approved',
+                        mercadoPagoPaymentId: res.paymentId
+                      }
+                    }
+                  : o
+              )
+            );
+            await confirmOrderPayment(ord.id, ord.status, res.paymentId ? String(res.paymentId) : undefined);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    checkPendingMpOrders();
+    const timer = setInterval(checkPendingMpOrders, 8000);
+    return () => clearInterval(timer);
+  }, [orders]);
+
+  const handleConfirmPaymentForOrder = async (order: Order, paymentId?: string) => {
+    setOrders(prev =>
+      prev.map(o =>
+        o.id === order.id
+          ? {
+              ...o,
+              paymentDetails: {
+                ...o.paymentDetails,
+                isPaid: true
+              }
+            }
+          : o
+      )
+    );
+    await confirmOrderPayment(order.id, order.status, paymentId);
+  };
+
+  const handleCheckMpForOrder = async (order: Order) => {
+    setCheckingPaymentOrderId(order.id);
+    try {
+      const res = await checkOrderPaymentStatus(order.id);
+      if (res.isPaid) {
+        await handleConfirmPaymentForOrder(order, res.paymentId ? String(res.paymentId) : undefined);
+      }
+    } finally {
+      setCheckingPaymentOrderId(null);
+    }
+  };
+
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus, cancellationReason?: string) => {
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (targetOrder && newStatus === 'PREPARANDO') {
+      const isMp =
+        targetOrder.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+        targetOrder.paymentMethod === 'CARTAO_ONLINE' ||
+        targetOrder.paymentMethod === 'MERCADO_PAGO';
+      const requiresPriorPayment = isMp || targetOrder.paymentMethod === 'PIX';
+      if (requiresPriorPayment && !targetOrder.paymentDetails?.isPaid) {
+        return;
+      }
+    }
+
     setOrders(prev => prev.map(o => o.id === orderId ? { 
       ...o, 
       status: newStatus,
@@ -842,7 +985,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               )}
                             </>
                           ) : order.paymentMethod === 'PIX' ? (
-                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">⚡ Pix Direto (Loja)</span>
+                            <>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">⚡ Pix Direto (Loja)</span>
+                              {order.paymentDetails?.isPaid ? (
+                                <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded-md font-black text-[10px]">
+                                  PAGO ✓
+                                </span>
+                              ) : (
+                                <span className="bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded-md font-black text-[10px]">
+                                  Aguardando Pix
+                                </span>
+                              )}
+                            </>
                           ) : (
                             order.paymentMethod === 'DINHEIRO' && (
                               order.paymentDetails?.needChange 
@@ -856,29 +1010,97 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                    {order.status === 'NOVO' && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => updateOrderStatus(order.id, 'PREPARANDO')}
-                          className="flex-1 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                        >
-                          <ChefHat className="w-4 h-4" />
-                          <span>Aceitar e Preparar</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setRejectModalOrder(order);
-                            setRejectionReason('Ingredientes ou produtos esgotados no momento');
-                            setCustomRejectionReason('');
-                          }}
-                          className="bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
-                          title="Não aceitar / Recusar pedido"
-                        >
-                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
-                          <span>Não Aceitar</span>
-                        </button>
-                      </div>
-                    )}
+                    {order.status === 'NOVO' && (() => {
+                      const isMp =
+                        order.paymentDetails?.gateway === 'MERCADO_PAGO' ||
+                        order.paymentMethod === 'CARTAO_ONLINE' ||
+                        order.paymentMethod === 'MERCADO_PAGO';
+                      const requiresPriorPayment = isMp || order.paymentMethod === 'PIX';
+                      const isPaid = Boolean(order.paymentDetails?.isPaid);
+                      const isPrepLocked = requiresPriorPayment && !isPaid;
+
+                      return (
+                        <div className="space-y-2">
+                          {isPrepLocked && (
+                            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 space-y-2">
+                              <p className="text-[11px] font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                                <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>
+                                  {isMp
+                                    ? 'Aguardando confirmação do Mercado Pago para liberar o preparo'
+                                    : 'Confirme o recebimento do Pix para liberar o preparo'}
+                                </span>
+                              </p>
+                              <div className="flex gap-1.5">
+                                {isMp && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCheckMpForOrder(order)}
+                                    disabled={checkingPaymentOrderId === order.id}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-60"
+                                  >
+                                    <RefreshCw className={`w-3 h-3 ${checkingPaymentOrderId === order.id ? 'animate-spin' : ''}`} />
+                                    <span>{checkingPaymentOrderId === order.id ? 'Consultando...' : 'Verificar no MP'}</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmPaymentForOrder(order)}
+                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                  title="Marcar pagamento como confirmado e liberar preparo"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>{isMp ? 'Confirmar Pago' : 'Confirmar Pix Recebido'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={isPrepLocked}
+                              onClick={() => updateOrderStatus(order.id, 'PREPARANDO')}
+                              title={
+                                isPrepLocked
+                                  ? 'O preparo só pode ser iniciado após a confirmação do pagamento'
+                                  : 'Iniciar preparo do pedido'
+                              }
+                              className={`flex-1 font-black py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs ${
+                                isPrepLocked
+                                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-500 border border-slate-300 dark:border-slate-700 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-500 hover:to-amber-600 text-purple-950 cursor-pointer'
+                              }`}
+                            >
+                              {isPrepLocked ? (
+                                <>
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Aguardando Pagamento</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChefHat className="w-4 h-4" />
+                                  <span>Aceitar e Preparar</span>
+                                </>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectModalOrder(order);
+                                setRejectionReason('Ingredientes ou produtos esgotados no momento');
+                                setCustomRejectionReason('');
+                              }}
+                              className="bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+                              title="Não aceitar / Recusar pedido"
+                            >
+                              <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                              <span>Não Aceitar</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {order.status === 'PREPARANDO' && (
                       <div className="flex gap-2">
