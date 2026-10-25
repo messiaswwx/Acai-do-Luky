@@ -392,11 +392,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
     >
-      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-purple-200 dark:border-purple-900/40 text-slate-800 dark:text-slate-100 animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden border border-purple-200 dark:border-purple-900/40 text-slate-800 dark:text-slate-100 animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className={`p-6 text-center relative border-b text-white ${
+        <div className={`p-4 sm:p-6 text-center relative border-b text-white ${
           isCancelled
             ? 'bg-gradient-to-r from-red-700 via-rose-700 to-red-800 border-red-800'
             : 'bg-gradient-to-r from-[#471256] via-[#5c1c73] to-[#360942] border-purple-800'

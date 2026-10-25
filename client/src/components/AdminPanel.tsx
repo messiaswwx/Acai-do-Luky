@@ -663,23 +663,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [orders, filterStatus]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Top Header Bar for Admin */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-purple-200/80 dark:border-purple-900/40 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-slate-800 dark:text-slate-100">
-        <div className="flex items-center gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-purple-200/80 dark:border-purple-900/40 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 text-slate-800 dark:text-slate-100">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <img
             src="/logo.png"
             alt="Logo"
-            className="w-12 h-12 rounded-full border-2 border-amber-400 bg-white object-contain shadow-sm"
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-amber-400 bg-white object-contain shadow-sm shrink-0"
           />
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-900 dark:text-white">Painel do Luky</h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-xl font-black text-slate-900 dark:text-white truncate">Painel do Luky</h1>
               <button
                 type="button"
                 onClick={handleQuickToggleStoreOpen}
                 title="Clique para alternar entre Loja Aberta e Loja Fechada"
-                className={`text-xs px-2.5 py-1 rounded-full font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                className={`text-[11px] sm:text-xs px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-black flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 ${
                   localSettings.isOpen 
                     ? 'bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' 
                     : 'bg-red-100 hover:bg-red-200 dark:bg-red-950/80 dark:hover:bg-red-900 text-red-800 dark:text-red-300 border border-red-300 dark:border-red-800 animate-pulse'
@@ -689,56 +689,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>{localSettings.isOpen ? 'Loja Aberta' : 'Loja Fechada'}</span>
               </button>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cozinha, Gestão de Preços, Promoções e Cardápio</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Cozinha, Gestão de Preços, Promoções e Cardápio</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           {onToggleTheme && (
             <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
           )}
 
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+            className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer border ${
               soundEnabled
                 ? 'bg-amber-50 dark:bg-amber-950/40 text-purple-950 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
             }`}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-purple-700 dark:text-amber-400" /> : <VolumeX className="w-4 h-4" />}
-            <span>Som: {soundEnabled ? 'Ligado' : 'Mudo'}</span>
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-700 dark:text-amber-400" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <span className="hidden xs:inline">Som:</span>
+            <span>{soundEnabled ? 'Ligado' : 'Mudo'}</span>
           </button>
 
           <button
             onClick={playOrderAlert}
-            className="px-3 py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-900 dark:text-purple-300 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-purple-200 dark:border-purple-800"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-900 dark:text-purple-300 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-purple-200 dark:border-purple-800"
             title="Testar campainha"
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           <button
             onClick={loadOrders}
-            className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Atualizar</span>
           </button>
 
           <Link
             to="/"
             target="_blank"
-            className="px-3 py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            <span>Cardápio Cliente</span>
+            <span className="hidden sm:inline">Cardápio Cliente</span>
+            <span className="sm:hidden">Cardápio</span>
           </Link>
 
           {onLogout && (
             <button
               onClick={onLogout}
-              className="px-3 py-2 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
               title="Sair do painel e bloquear acesso"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -749,62 +751,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0">
-            <DollarSign className="w-5 h-5" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Faturamento</span>
-            <div className="text-lg font-black text-purple-950 dark:text-amber-400">{formatCurrency(totalRevenue)}</div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Total Pedidos</span>
-            <div className="text-lg font-black text-slate-900 dark:text-white">{orders.length}</div>
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase block truncate">Faturamento</span>
+            <div className="text-base sm:text-lg font-black text-purple-950 dark:text-amber-400 truncate">{formatCurrency(totalRevenue)}</div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-400 text-purple-950 flex items-center justify-center shrink-0 font-black">
-            <Bell className="w-5 h-5" />
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+            <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase">Novos Pedidos</span>
-            <div className="text-lg font-black text-amber-700 dark:text-amber-400">{pendingOrders.length}</div>
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase block truncate">Total Pedidos</span>
+            <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white">{orders.length}</div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
-            <ChefHat className="w-5 h-5" />
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-400 text-purple-950 flex items-center justify-center shrink-0 font-black">
+            <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Em Preparo</span>
-            <div className="text-lg font-black text-purple-700 dark:text-purple-300">{inPrepOrders.length}</div>
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase block truncate">Novos Pedidos</span>
+            <div className="text-base sm:text-lg font-black text-amber-700 dark:text-amber-400">{pendingOrders.length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+            <ChefHat className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase block truncate">Em Preparo</span>
+            <div className="text-base sm:text-lg font-black text-purple-700 dark:text-purple-300">{inPrepOrders.length}</div>
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-purple-200 dark:border-purple-900/60 gap-2">
+      {/* Navigation Tabs - 2x2 proportional grid on mobile, horizontal bar on desktop */}
+      <div className="grid grid-cols-2 sm:flex sm:border-b sm:border-purple-200 dark:sm:border-purple-900/60 gap-2">
         <button
           onClick={() => setActiveTab('PEDIDOS')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
             activeTab === 'PEDIDOS'
-              ? 'border-purple-800 dark:border-amber-400 text-purple-950 dark:text-amber-300'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Gestão de Pedidos ({orders.length})</span>
+          <ShoppingBag className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Gestão de Pedidos ({orders.length})</span>
+          <span className="sm:hidden truncate">Pedidos ({orders.length})</span>
           {pendingOrders.length > 0 && (
-            <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-bounce">
+            <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-bounce shrink-0">
               {pendingOrders.length}
             </span>
           )}
@@ -812,28 +815,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           onClick={() => setActiveTab('CARDAPIO')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
             activeTab === 'CARDAPIO'
-              ? 'border-purple-800 dark:border-amber-400 text-purple-950 dark:text-amber-300'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <SlidersHorizontal className="w-4 h-4" />
-          <span>Preços, Descontos & Cardápio</span>
+          <SlidersHorizontal className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Preços, Descontos & Cardápio</span>
+          <span className="sm:hidden truncate">Cardápio & Preços</span>
         </button>
 
         <button
           onClick={() => setActiveTab('ESTOQUE')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
             activeTab === 'ESTOQUE'
-              ? 'border-purple-800 dark:border-amber-400 text-purple-950 dark:text-amber-300'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <Boxes className="w-4 h-4" />
-          <span>Estoque de Embalagens ({inventory.length})</span>
+          <Boxes className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Estoque de Embalagens ({inventory.length})</span>
+          <span className="sm:hidden truncate">Estoque ({inventory.length})</span>
           {lowStockItems.length > 0 && (
-            <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+            <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse shrink-0">
               {lowStockItems.length}
             </span>
           )}
@@ -841,14 +846,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           onClick={() => setActiveTab('CONFIGURACOES')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
             activeTab === 'CONFIGURACOES'
-              ? 'border-purple-800 dark:border-amber-400 text-purple-950 dark:text-amber-300'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <Settings className="w-4 h-4" />
-          <span>Configurações</span>
+          <Settings className="w-4 h-4 shrink-0" />
+          <span className="truncate">Configurações</span>
         </button>
       </div>
 
@@ -1248,7 +1253,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* TAB 2: CONTROLE DE PREÇOS, DESCONTOS COM HORAS & ESTOQUE */}
       {activeTab === 'CARDAPIO' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-6 text-slate-800 dark:text-slate-100">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 space-y-5 sm:space-y-6 text-slate-800 dark:text-slate-100">
           {/* Action Header with Save Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
             <div>
@@ -1997,7 +2002,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* TAB 4: CONFIGURAÇÕES DA LOJA */}
       {activeTab === 'CONFIGURACOES' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100">
           <form onSubmit={handleSaveSettings} className="max-w-xl space-y-5">
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Configurações Gerais da Loja</h2>

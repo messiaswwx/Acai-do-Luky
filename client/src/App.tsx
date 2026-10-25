@@ -790,23 +790,23 @@ export default function App() {
           path="/"
           element={
             <div className="min-h-screen bg-gradient-to-b from-purple-50/50 via-slate-50 to-purple-50/30 dark:from-slate-950 dark:via-purple-950/20 dark:to-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-              {/* Header do Cliente (100% focado na experiência de compra) */}
-              <header className="bg-purple-950 text-slate-200 text-xs py-2.5 px-4 border-b border-purple-900/60 sticky top-0 z-40 shadow-md">
-                <div className="max-w-4xl mx-auto flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+              {/* Header do Cliente (100% focado na experiência de compra e proporcional no celular) */}
+              <header className="bg-purple-950 text-slate-200 text-xs py-2.5 px-3 sm:px-4 border-b border-purple-900/60 sticky top-0 z-40 shadow-md">
+                <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
                     <img 
                       src="/logo.png" 
                       alt="Logo Açaí do Luky" 
-                      className="w-8 h-8 rounded-full object-contain bg-white shadow-xs shrink-0 ring-1 ring-amber-400" 
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-contain bg-white shadow-xs shrink-0 ring-1 ring-amber-400" 
                     />
-                    <span className="font-extrabold text-white tracking-wide flex items-center gap-1.5">
-                      <span>{settings.storeName}</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                      <span className="text-[10px] text-amber-300 font-semibold hidden sm:inline">Delivery Oficial</span>
+                    <span className="font-extrabold text-white tracking-wide flex items-center gap-1.5 min-w-0">
+                      <span className="truncate text-xs sm:text-sm">{settings.storeName}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 hidden sm:inline-block shrink-0"></span>
+                      <span className="text-[10px] text-amber-300 font-semibold hidden sm:inline shrink-0">Delivery Oficial</span>
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     {/* Botão de Tema Escuro / Claro */}
                     <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
 
@@ -819,7 +819,7 @@ export default function App() {
                           setIsSearchOrderOpen(true);
                         }
                       }}
-                      className={`px-3 py-1 rounded-full text-xs font-black shadow-xs flex items-center gap-1.5 cursor-pointer transition-all ${
+                      className={`px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-black shadow-xs flex items-center gap-1 sm:gap-1.5 cursor-pointer transition-all ${
                         activeOrder?.status === 'CANCELADO'
                           ? 'bg-red-500 text-white animate-bounce ring-2 ring-red-300'
                           : activeOrder
@@ -830,18 +830,21 @@ export default function App() {
                     >
                       {activeOrder?.status === 'CANCELADO' ? (
                         <>
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Pedido Não Aceito (Ver Aviso)</span>
+                          <XCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="hidden sm:inline">Pedido Não Aceito (Ver Aviso)</span>
+                          <span className="sm:hidden">Ver Aviso</span>
                         </>
                       ) : activeOrder ? (
                         <>
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Acompanhar Pedido</span>
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span className="hidden sm:inline">Acompanhar Pedido</span>
+                          <span className="sm:hidden">Pedido</span>
                         </>
                       ) : (
                         <>
-                          <Clock className="w-3.5 h-3.5 text-amber-300" />
-                          <span>Rastrear Pedido</span>
+                          <Clock className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                          <span className="hidden sm:inline">Rastrear Pedido</span>
+                          <span className="sm:hidden">Rastrear</span>
                         </>
                       )}
                     </button>
@@ -849,16 +852,16 @@ export default function App() {
                     {/* Botão de Conta / Perfil do Cliente */}
                     <button
                       onClick={() => setIsCustomerDrawerOpen(true)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      className={`px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                         customer
                           ? 'bg-purple-900/90 hover:bg-purple-800 text-white border border-purple-700/60 shadow-xs'
                           : 'bg-white/10 hover:bg-white/20 text-white'
                       }`}
                       title={customer ? `Conectado como ${customer.name || 'Cliente'}` : 'Acessar minha conta'}
                     >
-                      <User className="w-3.5 h-3.5 text-amber-300" />
+                      <User className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                       {customer ? (
-                        <span className="max-w-[100px] truncate">{customer.name ? customer.name.split(' ')[0] : 'Conta'}</span>
+                        <span className="max-w-[68px] sm:max-w-[100px] truncate">{customer.name ? customer.name.split(' ')[0] : 'Conta'}</span>
                       ) : (
                         <>
                           <span className="hidden sm:inline">Minha Conta</span>
@@ -869,10 +872,10 @@ export default function App() {
 
                     <button
                       onClick={() => setIsCartOpen(true)}
-                      className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="bg-white/10 hover:bg-white/20 text-white px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer"
                     >
-                      <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Sacola</span>
+                      <ShoppingBag className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span className="hidden xs:inline sm:inline">Sacola</span>
                       {totalCartCount > 0 && (
                         <span className="bg-amber-400 text-purple-950 text-[10px] w-4 h-4 rounded-full font-black flex items-center justify-center">
                           {totalCartCount}
@@ -884,7 +887,7 @@ export default function App() {
               </header>
 
               {/* Conteúdo Principal do Cliente */}
-              <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 space-y-6">
+              <main className="flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 pb-28 space-y-5 sm:space-y-6">
                 {/* Banner de Aviso de Pedido Não Aceito (se o cliente tiver minimizado o modal) */}
                 {activeOrder && activeOrder.status === 'CANCELADO' && !isTrackingModalOpen && (
                   <div 
@@ -937,21 +940,21 @@ export default function App() {
                 )}
 
                 {/* Hero Card */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-[#471256] via-[#5c1c73] to-[#360942] text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-purple-800/40">
+                <div className="relative overflow-hidden bg-gradient-to-br from-[#471256] via-[#5c1c73] to-[#360942] text-white rounded-3xl p-4 sm:p-8 shadow-2xl border border-purple-800/40">
                   <div className="absolute -right-8 -bottom-8 w-48 h-48 rounded-full bg-amber-400/10 pointer-events-none" />
                   <div className="absolute right-20 -top-8 w-36 h-36 rounded-full bg-purple-400/15 pointer-events-none" />
 
-                  <div className="relative z-10 space-y-5">
+                  <div className="relative z-10 space-y-4 sm:space-y-5">
                     {/* Status & WhatsApp */}
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         {isInitialLoading ? (
-                          <span className="bg-purple-900/60 text-purple-200 border border-purple-400/30 text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                          <span className="bg-purple-900/60 text-purple-200 border border-purple-400/30 text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
                             <Clock className="w-3.5 h-3.5 text-amber-300" />
                             <span>Verificando loja...</span>
                           </span>
                         ) : (
-                          <span className={`text-xs px-3 py-1 rounded-full font-black flex items-center gap-1.5 shadow-sm ${
+                          <span className={`text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 rounded-full font-black flex items-center gap-1.5 shadow-sm ${
                             settings.isOpen 
                               ? 'bg-emerald-500 text-white' 
                               : 'bg-red-500 text-white'
@@ -971,7 +974,7 @@ export default function App() {
                         href={`https://wa.me/55${String(settings?.whatsapp || '').replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1.5 text-xs font-bold text-amber-300 hover:text-amber-200 bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-full border border-white/10 transition-colors"
+                        className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-amber-300 hover:text-amber-200 bg-white/10 hover:bg-white/15 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/10 transition-colors"
                       >
                         <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
                         <span>WhatsApp da Loja</span>
@@ -979,9 +982,9 @@ export default function App() {
                     </div>
 
                     {/* Logo + Headline */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-4 sm:gap-6 pt-1">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-3 sm:gap-6 pt-1">
                       <div className="relative shrink-0 flex items-center justify-center">
-                        <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-white p-1 ring-4 ring-amber-400 shadow-2xl flex items-center justify-center overflow-hidden">
+                        <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-white p-1 ring-4 ring-amber-400 shadow-2xl flex items-center justify-center overflow-hidden">
                           <img
                             src="/logo.png"
                             alt="Logo Açaí do Luky"
@@ -991,11 +994,11 @@ export default function App() {
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-amber-300 font-black text-xs uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1">
+                        <span className="text-amber-300 font-black text-[11px] sm:text-xs uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1">
                           <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
                           O Mais Gostoso da Região
                         </span>
-                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white drop-shadow-sm">
+                        <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white drop-shadow-sm">
                           {settings.storeName}
                         </h1>
                         <p className="text-purple-200 text-xs sm:text-sm font-medium max-w-lg leading-relaxed">
@@ -1049,21 +1052,21 @@ export default function App() {
                 </div>
 
                 {/* Lista de Tamanhos */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-3.5 sm:space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                        <Flame className="w-6 h-6 text-amber-500 fill-amber-500" />
-                        Escolha o Tamanho Perfeito
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500 fill-amber-500 shrink-0" />
+                        <span>Escolha o Tamanho Perfeito</span>
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Todos os copos acompanham recheio grátis</p>
                     </div>
-                    <span className="text-xs font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-3 py-1 rounded-full border border-purple-200 dark:border-purple-900/50">
+                    <span className="text-[11px] sm:text-xs font-black text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2.5 sm:px-3 py-1 rounded-full border border-purple-200 dark:border-purple-900/50 shrink-0">
                       A partir de R$ 14,00
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                     {(Array.isArray(menu?.sizes) && menu.sizes.length > 0 ? menu.sizes : INITIAL_MENU.sizes).map(size => {
                       const badge = getSizeBadge(size.id, size.name);
                       const isTopSeller = size.id === 'size-500';
@@ -1076,7 +1079,7 @@ export default function App() {
                       return (
                         <div
                           key={size.id}
-                          className={`relative bg-white dark:bg-slate-900 rounded-3xl p-5 border-2 transition-all flex flex-col justify-between ${
+                          className={`relative bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border-2 transition-all flex flex-col justify-between ${
                             !size.available
                               ? 'border-slate-200 dark:border-slate-800 opacity-60'
                               : isPromo
@@ -1430,8 +1433,8 @@ export default function App() {
           path="/admin"
           element={
             isAdminAuthenticated ? (
-              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-                <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 pb-20">
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 overflow-x-hidden">
+                <main className="flex-1 max-w-5xl w-full mx-auto p-2.5 sm:p-6 pb-24">
                   <AdminPanel
                     settings={settings}
                     menu={menu}
