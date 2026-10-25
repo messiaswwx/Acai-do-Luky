@@ -1,12 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { CartItem, StoreSettings, PaymentMethod, Order, CustomerProfile } from '../types';
 import { formatCurrency } from '../utils/format';
-import { X, Bike, Store, QrCode, ShieldCheck, Copy, Check, ArrowLeft, Send, Smartphone, ExternalLink } from 'lucide-react';
+import { X, Bike, Store, QrCode, ShieldCheck, Copy, Check, ArrowLeft, Send, Smartphone, ExternalLink, Search, RefreshCw, AlertTriangle, MessageCircle, MapPin } from 'lucide-react';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { createOrder } from '../services/supabaseService';
 import { createMercadoPagoPreference } from '../services/mercadopagoService';
 import { sanitizeText, sanitizePhone } from '../utils/sanitize';
-import { PRAIA_GRANDE_NEIGHBORHOODS, getDeliveryFeeByNeighborhood } from '../utils/delivery';
+import { PRAIA_GRANDE_NEIGHBORHOODS, getDeliveryFeeByNeighborhood, formatCep, lookupCep, matchPraiaGrandeNeighborhood } from '../utils/delivery';
 
 interface CheckoutModalProps {
   items: CartItem[];
@@ -30,6 +30,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [orderType, setOrderType] = useState<'ENTREGA' | 'RETIRADA'>('ENTREGA');
 
   // Address
+  const [cep, setCep] = useState('');
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepFeedback, setCepFeedback] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [outOfRangeCityInfo, setOutOfRangeCityInfo] = useState<{
+    city: string;
+    uf: string;
+    cep: string;
+    street: string;
+    neighborhood: string;
+  } | null>(null);
+  const numberInputRef = useRef<HTMLInputElement | null>(null);
+
   const [street, setStreet] = useState(() => customer?.address?.street || '');
   const [number, setNumber] = useState(() => customer?.address?.number || '');
   const [selectedNeighborhoodOption, setSelectedNeighborhoodOption] = useState(() => {
@@ -85,6 +97,84 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     navigator.clipboard.writeText(settings.pixKey);
     setCopiedPix(true);
     setTimeout(() => setCopiedPix(false), 2500);
+  };
+
+  const handleCepChange = async (rawValue: string) => {
+    const formatted = formatCep(rawValue);
+    setCep(formatted);
+    const digits = formatted.replace(/\D/g, '');
+
+    if (digits.length < 8) {
+      setCepFeedback(null);
+      return;
+    }
+
+    setCepLoading(true);
+    setCepFeedback(null);
+    try {
+      const res = await lookupCep(digits);
+      if (!res.found) {
+        setCepFeedback({
+          type: 'error',
+          text: 'CEP não encontrado. Você pode preencher sua rua e bairro manualmente abaixo.'
+        });
+        return;
+      }
+
+      if (res.street) {
+        setStreet(res.street);
+      }
+
+      if (res.isPraiaGrande) {
+        const matched = matchPraiaGrandeNeighborhood(res.neighborhood);
+        if (matched.option) {
+          setSelectedNeighborhoodOption(matched.option);
+          setCustomNeighborhood(matched.customName);
+        }
+        setCepFeedback({
+          type: 'success',
+          text: `✅ Endereço localizado em Praia Grande (${res.neighborhood || 'Centro'})! Digite apenas o número.`
+        });
+        setTimeout(() => numberInputRef.current?.focus(), 80);
+      } else {
+        setSelectedNeighborhoodOption('Outros');
+        setCustomNeighborhood(res.neighborhood ? `${res.neighborhood} (${res.city})` : res.city);
+        setCepFeedback({
+          type: 'warning',
+          text: `⚠️ CEP pertence a ${res.city}${res.uf ? ` - ${res.uf}` : ''} (fora do alcance padrão).`
+        });
+        setOutOfRangeCityInfo({
+          city: res.city || 'Outra Cidade',
+          uf: res.uf || '',
+          cep: res.cep,
+          street: res.street,
+          neighborhood: res.neighborhood
+        });
+      }
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const handleContactLukyOutOfRange = () => {
+    const rawPhone = settings?.whatsapp || '13997040932';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const cityLabel = outOfRangeCityInfo
+      ? `${outOfRangeCityInfo.city}${outOfRangeCityInfo.uf ? ` - ${outOfRangeCityInfo.uf}` : ''}`
+      : 'minha cidade';
+    const cepLabel = outOfRangeCityInfo?.cep || cep;
+    const addressLabel = [outOfRangeCityInfo?.street || street, number, outOfRangeCityInfo?.neighborhood]
+      .filter(Boolean)
+      .join(', ');
+    const itemsSummary = items.map(i => `${i.quantity}x ${i.size.name} (${i.base.name})`).join(', ');
+    const message = encodeURIComponent(
+      `Olá Luky! 😊 Vi no site que minha cidade (*${cityLabel}* - CEP ${cepLabel}) está fora do alcance padrão.\n\n` +
+      (addressLabel ? `📍 *Endereço:* ${addressLabel}\n` : '') +
+      (itemsSummary ? `🍨 *Pedido:* ${itemsSummary}\n` : '') +
+      `Gostaria de saber se consegue entregar aqui!`
+    );
+    window.open(`https://wa.me/${phoneWithCountry}?text=${message}`, '_blank');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -333,6 +423,47 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Endereço de Entrega */}
             {orderType === 'ENTREGA' ? (
               <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 mt-2">
+                {/* Campo de CEP com Preenchimento Automático */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
+                      <span>CEP (Preenche rua e bairro automaticamente)</span>
+                    </label>
+                    {cepLoading && (
+                      <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Buscando CEP...
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={9}
+                      placeholder="Digite seu CEP (Ex: 11704-000)"
+                      value={cep}
+                      onChange={e => handleCepChange(e.target.value)}
+                      className="w-full text-xs p-2.5 pr-9 rounded-xl border border-purple-200 dark:border-purple-800/70 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold tracking-wider focus:ring-2 focus:ring-purple-600 focus:outline-hidden"
+                    />
+                    <Search className="w-4 h-4 text-purple-500 dark:text-purple-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  {cepFeedback && (
+                    <p
+                      className={`text-[11px] font-bold mt-1.5 px-2.5 py-1.5 rounded-lg border ${
+                        cepFeedback.type === 'success'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : cepFeedback.type === 'warning'
+                          ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                          : 'bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                      }`}
+                    >
+                      {cepFeedback.text}
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Rua / Avenida *</label>
@@ -348,6 +479,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Número *</label>
                     <input
+                      ref={numberInputRef}
                       type="text"
                       required
                       placeholder="Ex: 123"
@@ -621,6 +753,69 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </span>
           </button>
         </div>
+
+        {/* Tela / Modal de Aviso quando o CEP pertence a outra cidade fora do alcance padrão */}
+        {outOfRangeCityInfo && (
+          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border-2 border-amber-400 dark:border-amber-500 animate-in zoom-in-95 duration-200">
+              <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-5 text-center text-white relative">
+                <button
+                  type="button"
+                  onClick={() => setOutOfRangeCityInfo(null)}
+                  className="absolute top-3.5 right-3.5 p-1.5 rounded-full bg-black/20 hover:bg-black/35 text-white transition-colors cursor-pointer"
+                  title="Fechar aviso"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="w-12 h-12 rounded-2xl bg-white/20 mx-auto flex items-center justify-center mb-2 shadow-inner">
+                  <AlertTriangle className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="font-black text-base sm:text-lg leading-tight">
+                  Sua cidade está fora do alcance padrão
+                </h3>
+                <p className="text-amber-100 text-xs font-bold mt-1">
+                  CEP {outOfRangeCityInfo.cep} • {outOfRangeCityInfo.city}{outOfRangeCityInfo.uf ? ` - ${outOfRangeCityInfo.uf}` : ''}
+                </p>
+              </div>
+
+              <div className="p-5 space-y-4 text-center">
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 font-semibold leading-relaxed">
+                  Sua cidade está fora do alcance padrão. Entre em contato com o vendedor para verificar a disponibilidade de entrega para o seu endereço!
+                </p>
+
+                <div className="space-y-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleContactLukyOutOfRange}
+                    className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer active:scale-98"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span>Falar com o Luky no WhatsApp</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOutOfRangeCityInfo(null);
+                      setOrderType('RETIRADA');
+                    }}
+                    className="w-full py-2.5 px-4 bg-purple-100 dark:bg-purple-950/70 hover:bg-purple-200 dark:hover:bg-purple-900 text-purple-900 dark:text-purple-200 font-bold rounded-2xl text-xs transition-colors cursor-pointer"
+                  >
+                    Prefiro Retirar no Balcão (Sem Taxa)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOutOfRangeCityInfo(null)}
+                    className="w-full py-2 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    Voltar e preencher outro endereço
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
