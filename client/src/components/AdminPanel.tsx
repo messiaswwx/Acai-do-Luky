@@ -962,6 +962,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
 
                     <div className="border-t border-slate-100 dark:border-slate-800 pt-2 space-y-1">
+                      {order.orderType === 'ENTREGA' && (
+                        <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                          <span>Taxa de Entrega ({order.address?.neighborhood || 'Bairro'}):</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency(order.deliveryFee)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-slate-200">
                         <span>Total:</span>
                         <span className="text-purple-950 dark:text-amber-400 font-black text-base">{formatCurrency(order.total)}</span>
@@ -2001,14 +2007,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Taxa de Entrega Padrão (R$)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={localSettings.deliveryFee}
-                  onChange={e => setLocalSettings({ ...localSettings, deliveryFee: parseFloat(e.target.value) || 0 })}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:border-purple-600 dark:focus:border-purple-500"
-                />
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Taxas de Entrega por Bairro</label>
+                <div className="w-full text-xs p-3 rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 font-bold">
+                  🛵 Automática por bairro (R$ 4,00 a R$ 10,00)
+                </div>
               </div>
 
               <div>

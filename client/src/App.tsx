@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { SizeItem, CartItem, Order, MenuData, StoreSettings, CustomerProfile } from './types';
 import { formatCurrency } from './utils/format';
+import { getDeliveryFeeByNeighborhood } from './utils/delivery';
 import { isDiscountActive, getRemainingHoursText, getSizeLimits } from './utils/promo';
 import { getSocket } from './utils/socket';
 import { useTheme } from './utils/theme';
@@ -208,6 +209,15 @@ export function sanitizeOrder(obj: unknown): Order | null {
   const id = typeof o.id === 'string' ? o.id.trim() : '';
   if (!id) return null;
 
+  const orderType = o.orderType === 'RETIRADA' ? 'RETIRADA' : 'ENTREGA';
+  const address = o.address && typeof o.address === 'object' ? (o.address as any) : undefined;
+  const subtotal = Number(o.subtotal) || 0;
+  const deliveryFee =
+    orderType === 'ENTREGA'
+      ? getDeliveryFeeByNeighborhood(String(address?.neighborhood || ''), 10.00)
+      : 0;
+  const total = Number((subtotal + deliveryFee).toFixed(2));
+
   return {
     id,
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
@@ -215,14 +225,14 @@ export function sanitizeOrder(obj: unknown): Order | null {
     status: (typeof o.status === 'string' ? o.status : 'NOVO') as any,
     customerName: String(o.customerName || 'Cliente'),
     customerPhone: String(o.customerPhone || ''),
-    orderType: o.orderType === 'RETIRADA' ? 'RETIRADA' : 'ENTREGA',
-    address: o.address && typeof o.address === 'object' ? (o.address as any) : undefined,
+    orderType,
+    address,
     paymentMethod: (o.paymentMethod || 'PIX') as any,
     paymentDetails: o.paymentDetails && typeof o.paymentDetails === 'object' ? (o.paymentDetails as any) : undefined,
     items: Array.isArray(o.items) ? o.items.filter(Boolean) : [],
-    subtotal: Number(o.subtotal) || 0,
-    deliveryFee: Number(o.deliveryFee) || 0,
-    total: Number(o.total) || 0,
+    subtotal,
+    deliveryFee,
+    total,
     notes: typeof o.notes === 'string' ? o.notes : undefined,
     needCutlery: o.needCutlery !== false,
     cancellationReason: typeof o.cancellationReason === 'string' ? o.cancellationReason : undefined

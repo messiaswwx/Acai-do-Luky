@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../utils/supabase';
 import type { StoreSettings, MenuData, Order, OrderStatus, InventoryItem, CustomerProfile, PaymentMethod } from '../types';
+import { getDeliveryFeeByNeighborhood } from '../utils/delivery';
 
 // ==============================================================================
 // SEGURANÇA: Todas as operações sensíveis passam por funções RPC no banco
@@ -461,6 +462,15 @@ export function parseOrderRow(row: any): Order {
     };
   }
 
+  const effectiveOrderType = (row.delivery_type || row.orderType || 'ENTREGA') as 'ENTREGA' | 'RETIRADA';
+  const rawSubtotal = Number(row.subtotal) || 0;
+  const neighborhoodName = parsedAddress?.neighborhood || String(row.neighborhood || '');
+  const calculatedDeliveryFee =
+    effectiveOrderType === 'ENTREGA'
+      ? getDeliveryFeeByNeighborhood(neighborhoodName, 10.00)
+      : 0;
+  const calculatedTotal = Number((rawSubtotal + calculatedDeliveryFee).toFixed(2));
+
   return {
     id: row.id,
     createdAt: row.created_at || row.createdAt,
@@ -468,7 +478,7 @@ export function parseOrderRow(row: any): Order {
     status: effectiveStatus,
     customerName: row.customer_name || row.customerName || 'Cliente',
     customerPhone: row.customer_phone || row.customerPhone || '',
-    orderType: row.delivery_type || row.orderType || 'ENTREGA',
+    orderType: effectiveOrderType,
     address: parsedAddress,
     paymentMethod: (isMercadoPago ? 'MERCADO_PAGO' : (row.payment_method || row.paymentMethod || 'PIX')) as PaymentMethod,
     paymentDetails: {
@@ -478,9 +488,9 @@ export function parseOrderRow(row: any): Order {
       isPaid
     },
     items: parsedItems,
-    subtotal: Number(row.subtotal) || 0,
-    deliveryFee: Number(row.delivery_fee ?? row.deliveryFee) || 0,
-    total: Number(row.total) || 0,
+    subtotal: rawSubtotal,
+    deliveryFee: calculatedDeliveryFee,
+    total: calculatedTotal,
     notes: cleanNotes || undefined,
     needCutlery: row.need_cutlery ?? row.needCutlery ?? (/SEM COLHER/i.test(rawNotes) ? false : true),
     cancellationReason

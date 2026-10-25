@@ -3,6 +3,30 @@ const MP_ACCESS_TOKEN =
   process.env.MP_ACCESS_TOKEN ||
   'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
 
+function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 10.0) {
+  if (!neighborhoodName) return fallbackFee;
+  const clean = String(neighborhoodName)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+  if (clean.includes('ocian')) return 4.0;
+  if (clean.includes('tupiry') || clean.includes('tupiri')) return 6.0;
+  if (clean.includes('tupi')) return 5.0;
+  if (clean.includes('quietude')) return 6.0;
+  if (clean.includes('anhanguera')) return 5.0;
+  if (clean.includes('mirim')) return 5.0;
+  if (clean.includes('maracana')) return 7.0;
+  if (clean.includes('ribeiropolis') || clean.includes('ribeiro')) return 7.0;
+  if (clean.includes('esmeralda')) return 8.0;
+  if (clean.includes('samambaia')) return 8.0;
+  if (clean.includes('aviacao')) return 8.0;
+  if (clean.includes('antartica')) return 8.0;
+
+  return 10.0;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -42,20 +66,26 @@ export default async function handler(req, res) {
       unit_price: Number(item.unitPrice) || 0
     }));
 
-    if (order.deliveryFee && Number(order.deliveryFee) > 0) {
+    const effectiveDeliveryFee =
+      order.orderType === 'ENTREGA'
+        ? getDeliveryFeeByNeighborhood(order.address?.neighborhood || '', 10.0)
+        : 0;
+
+    if (effectiveDeliveryFee > 0) {
       items.push({
         id: 'delivery-fee',
         title: `Taxa de Entrega (${order.address?.neighborhood || 'Praia Grande'})`,
         description: 'Entrega rápida no endereço informado',
         quantity: 1,
         currency_id: 'BRL',
-        unit_price: Number(order.deliveryFee)
+        unit_price: Number(effectiveDeliveryFee)
       });
     }
 
-    const calculatedTotal = items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0);
+    const calculatedTotal = Number(items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0).toFixed(2));
+    const effectiveTotal = calculatedTotal > 0 ? calculatedTotal : total;
     const finalItems =
-      Math.abs(calculatedTotal - total) < 0.05
+      items.length > 0 && calculatedTotal > 0
         ? items
         : [
             {
@@ -64,7 +94,7 @@ export default async function handler(req, res) {
               description: 'Açaí artesanal montado com acompanhamentos',
               quantity: 1,
               currency_id: 'BRL',
-              unit_price: total
+              unit_price: effectiveTotal
             }
           ];
 
