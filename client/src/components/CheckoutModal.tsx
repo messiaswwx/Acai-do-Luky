@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { CartItem, StoreSettings, PaymentMethod, Order, CustomerProfile } from '../types';
 import { formatCurrency } from '../utils/format';
-import { X, Bike, Store, QrCode, ShieldCheck, Copy, Check, ArrowLeft, Send, Utensils, Smartphone, ExternalLink } from 'lucide-react';
+import { X, Bike, Store, QrCode, ShieldCheck, Copy, Check, ArrowLeft, Send, Smartphone, ExternalLink } from 'lucide-react';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { createOrder } from '../services/supabaseService';
 import { createMercadoPagoPreference } from '../services/mercadopagoService';
@@ -54,13 +54,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return selectedNeighborhoodOption;
   }, [selectedNeighborhoodOption, customNeighborhood]);
 
-  // Cutlery / Spoons: Com colher ou Sem colher
-  const [needCutlery, setNeedCutlery] = useState(() => {
+  // Cutlery / Spoons: herdado da escolha feita ao montar o copo
+  const needCutlery = useMemo(() => {
     if (items.length > 0 && items.every(i => i.needSpoon === false)) {
       return false;
     }
     return true;
-  });
+  }, [items]);
 
   // Forma de Pagamento: Mercado Pago Oficial (Padrão) ou Chave Pix Manual
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('MERCADO_PAGO');
@@ -432,55 +432,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             )}
           </div>
 
-          {/* 3. Colher Descartável */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-900 text-amber-300 text-xs font-black flex items-center justify-center">3</span>
-                <h3 className="font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <Utensils className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
-                  <span>Precisa de Colher Descartável?</span>
-                </h3>
-              </div>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                Grátis
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setNeedCutlery(true)}
-                className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  needCutlery
-                    ? 'border-purple-700 dark:border-purple-500 bg-purple-50 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 shadow-xs ring-1 ring-purple-600/30'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:border-slate-300'
-                }`}
-              >
-                <span>🥄 Com colher</span>
-                {needCutlery && <Check className="w-4 h-4 text-purple-700 dark:text-purple-400 stroke-[3]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setNeedCutlery(false)}
-                className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  !needCutlery
-                    ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-950 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-600/30'
-                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800/60 hover:border-slate-300'
-                }`}
-              >
-                <span>🍃 Sem colher</span>
-                {!needCutlery && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
-              </button>
-            </div>
-          </div>
-
-          {/* 4. Forma de Pagamento */}
+          {/* 3. Forma de Pagamento */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-900 text-amber-300 text-xs font-black flex items-center justify-center">4</span>
+                <span className="w-5 h-5 rounded-full bg-purple-900 text-amber-300 text-xs font-black flex items-center justify-center">3</span>
                 <h3 className="font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider">
                   Forma de Pagamento
                 </h3>
