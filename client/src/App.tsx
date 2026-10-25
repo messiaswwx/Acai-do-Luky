@@ -1005,7 +1005,7 @@ export default function App() {
                     </div>
 
                     {/* Quick Perks */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 pt-3 border-t border-purple-700/60 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 pt-3 border-t border-purple-700/60 text-xs">
                       <div className="bg-purple-900/50 p-2.5 rounded-2xl border border-purple-700/50 flex items-center gap-2">
                         <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                         <div>
@@ -1016,13 +1016,13 @@ export default function App() {
 
                       <div className="bg-purple-900/50 p-2.5 rounded-2xl border border-purple-700/50 flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-[10px] text-purple-300 block font-semibold">Entrega & Retirada</span>
-                          <strong className="text-white text-xs">Praia Grande</strong>
+                          <strong className="text-white text-xs block leading-snug">{settings.address || 'R. Eufrozina Maria da Conceição, 119'}</strong>
                         </div>
                       </div>
 
-                      <div className="bg-purple-900/50 p-2.5 rounded-2xl border border-purple-700/50 col-span-2 sm:col-span-1 flex items-center gap-2">
+                      <div className="bg-purple-900/50 p-2.5 rounded-2xl border border-purple-700/50 flex items-center gap-2">
                         <Heart className="w-4 h-4 text-pink-400 shrink-0" />
                         <div>
                           <span className="text-[10px] text-purple-300 block font-semibold">Pagamento Fácil</span>
