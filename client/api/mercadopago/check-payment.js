@@ -50,7 +50,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc&limit=1`;
+    // 1. Consulta pagamentos diretos pela external_reference (busca até 10 tentativas e prioriza 'approved')
+    const url = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc&limit=10`;
     const mpRes = await fetch(url, {
       method: 'GET',
       headers: {
@@ -64,7 +65,43 @@ export default async function handler(req, res) {
     }
 
     const data = await mpRes.json();
-    const payment = data.results && data.results[0];
+    const results = Array.isArray(data.results) ? data.results : [];
+    let payment = results.find(p => p && p.status === 'approved') || results[0] || null;
+
+    // 2. Fallback: consulta merchant_orders caso o pagamento esteja vinculado à ordem comercial
+    if (!payment || payment.status !== 'approved') {
+      try {
+        const moUrl = `https://api.mercadopago.com/merchant_orders/search?external_reference=${encodeURIComponent(orderId)}`;
+        const moRes = await fetch(moUrl, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (moRes.ok) {
+          const moData = await moRes.json();
+          const elements = Array.isArray(moData.elements) ? moData.elements : [];
+          for (const mo of elements) {
+            const moPayments = Array.isArray(mo.payments) ? mo.payments : [];
+            const approvedMoPayment = moPayments.find(p => p && p.status === 'approved');
+            if (approvedMoPayment) {
+              payment = {
+                id: approvedMoPayment.id,
+                status: 'approved',
+                status_detail: approvedMoPayment.status_detail || 'accredited',
+                payment_method_id: approvedMoPayment.payment_method_id || 'mercadopago',
+                date_approved: approvedMoPayment.date_approved || approvedMoPayment.last_modified,
+                transaction_amount: approvedMoPayment.transaction_amount || mo.total_amount
+              };
+              break;
+            }
+          }
+        }
+      } catch {
+        // Ignora erro de fallback de merchant_orders
+      }
+    }
 
     if (!payment) {
       return res.status(200).json({ isPaid: false, status: 'not_found' });

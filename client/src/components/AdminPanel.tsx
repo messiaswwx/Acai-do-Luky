@@ -7,6 +7,7 @@ import { getSocket } from '../utils/socket';
 import { isSupabaseConfigured } from '../utils/supabase';
 import { 
   fetchOrders as fetchSupabaseOrders,
+  fetchOrderById,
   updateOrderStatus as updateSupabaseOrderStatus,
   subscribeToOrders,
   fetchInventory,
@@ -151,6 +152,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const [checkingPaymentOrderId, setCheckingPaymentOrderId] = useState<string | null>(null);
+  const [mpCheckFeedback, setMpCheckFeedback] = useState<
+    Record<string, { type: 'success' | 'pending' | 'warning' | 'error'; text: string }>
+  >({});
   const soundEnabledRef = useRef(soundEnabled);
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
@@ -322,9 +326,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleCheckMpForOrder = async (order: Order) => {
     setCheckingPaymentOrderId(order.id);
     try {
-      const res = await checkOrderPaymentStatus(order.id);
-      if (res.isPaid) {
+      const [res, refreshedOrder] = await Promise.all([
+        checkOrderPaymentStatus(order.id),
+        isSupabaseConfigured ? fetchOrderById(order.id).catch(() => null) : Promise.resolve(null)
+      ]);
+
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const alreadyPaidInDb = Boolean(refreshedOrder?.paymentDetails?.isPaid);
+
+      if (res.isPaid || alreadyPaidInDb) {
+        setMpCheckFeedback(prev => ({
+          ...prev,
+          [order.id]: {
+            type: 'success',
+            text: `✅ Confirmado às ${nowTime}: Pagamento aprovado no Mercado Pago! Preparo liberado.`
+          }
+        }));
         await handleConfirmPaymentForOrder(order, res.paymentId ? String(res.paymentId) : undefined);
+      } else if (res.status === 'pending' || res.status === 'in_process') {
+        setMpCheckFeedback(prev => ({
+          ...prev,
+          [order.id]: {
+            type: 'pending',
+            text: `⏳ Consultado às ${nowTime}: Cliente iniciou o pagamento, aguardando aprovação do Mercado Pago.`
+          }
+        }));
+      } else if (res.status === 'rejected' || res.status === 'cancelled') {
+        setMpCheckFeedback(prev => ({
+          ...prev,
+          [order.id]: {
+            type: 'error',
+            text: `❌ Consultado às ${nowTime}: Tentativa de pagamento recusada ou cancelada no Mercado Pago.`
+          }
+        }));
+      } else if (res.status === 'error') {
+        setMpCheckFeedback(prev => ({
+          ...prev,
+          [order.id]: {
+            type: 'error',
+            text: `⚠️ Falha ao conectar na API do Mercado Pago às ${nowTime}. Tente novamente.`
+          }
+        }));
+      } else {
+        setMpCheckFeedback(prev => ({
+          ...prev,
+          [order.id]: {
+            type: 'warning',
+            text: `ℹ️ Consultado às ${nowTime}: Cliente ainda não concluiu o pagamento no Mercado Pago.`
+          }
+        }));
       }
     } finally {
       setCheckingPaymentOrderId(null);
@@ -1059,6 +1109,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <span>{isMp ? 'Confirmar Pago' : 'Confirmar Pix Recebido'}</span>
                                 </button>
                               </div>
+                              {mpCheckFeedback[order.id] && (
+                                <div
+                                  className={`p-2 rounded-lg text-[11px] font-bold border ${
+                                    mpCheckFeedback[order.id].type === 'success'
+                                      ? 'bg-emerald-100/90 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800'
+                                      : mpCheckFeedback[order.id].type === 'error'
+                                      ? 'bg-red-100/90 dark:bg-red-950/60 text-red-900 dark:text-red-200 border-red-300 dark:border-red-800'
+                                      : 'bg-blue-100/90 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-800'
+                                  }`}
+                                >
+                                  {mpCheckFeedback[order.id].text}
+                                </div>
+                              )}
                             </div>
                           )}
 
