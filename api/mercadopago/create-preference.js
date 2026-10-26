@@ -3,28 +3,36 @@ const MP_ACCESS_TOKEN =
   process.env.MP_ACCESS_TOKEN ||
   'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
 
-function getDeliveryFeeByNeighborhood(neighborhoodName, fallbackFee = 10.0) {
-  if (!neighborhoodName) return fallbackFee;
-  const clean = String(neighborhoodName)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  'https://efwgevkgqeoenfpretrg.supabase.co';
 
-  if (clean.includes('ocian')) return 4.0;
-  if (clean.includes('tupiry') || clean.includes('tupiri')) return 6.0;
-  if (clean.includes('tupi')) return 5.0;
-  if (clean.includes('quietude')) return 6.0;
-  if (clean.includes('anhanguera')) return 5.0;
-  if (clean.includes('mirim')) return 5.0;
-  if (clean.includes('maracana')) return 7.0;
-  if (clean.includes('ribeiropolis') || clean.includes('ribeiro')) return 7.0;
-  if (clean.includes('esmeralda')) return 8.0;
-  if (clean.includes('samambaia')) return 8.0;
-  if (clean.includes('aviacao')) return 8.0;
-  if (clean.includes('antartica')) return 8.0;
+const SUPABASE_ANON_KEY =
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmd2dldmtncWVvZW5mcHJldHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDA3NDIsImV4cCI6MjEwODExNjc0Mn0.sKHLJxnjctSwCZAwrOOZNrpfsum3NAxGbW3ek_luhC4';
 
-  return 10.0;
+async function fetchOfficialOrder(orderId) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !orderId) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_get_order`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_order_id: orderId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data || null;
+    }
+  } catch {
+    // fallback seguro
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -51,13 +59,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Dados do pedido ausentes' });
     }
 
+    // Busca o pedido oficial salvo no banco de dados para evitar manipulação de valores
+    const dbOrder = await fetchOfficialOrder(order.id);
+    const targetOrder = dbOrder || order;
+
     const baseOrigin = (origin || req.headers.origin || 'https://acai-do-luky.vercel.app').replace(/\/+$/, '');
     const webhookOrigin = baseOrigin.startsWith('https://')
       ? baseOrigin
       : 'https://acai-do-luky.vercel.app';
-    const total = Number(order.total) || 0;
 
-    const items = (Array.isArray(order.items) ? order.items : []).map(item => ({
+    const officialTotal = Number(targetOrder.total) || Number(order.total) || 0;
+    const rawItems = Array.isArray(targetOrder.items) ? targetOrder.items : (Array.isArray(order.items) ? order.items : []);
+
+    const items = rawItems.map(item => ({
       id: item.id || `item-${Math.random().toString(36).substring(2, 7)}`,
       title: `${item.size?.name || 'Açaí'} (${item.base?.name || 'Tradicional'})`.substring(0, 120),
       description: 'Açaí artesanal montado com acompanhamentos',
@@ -66,59 +80,54 @@ export default async function handler(req, res) {
       unit_price: Number(item.unitPrice) || 0
     }));
 
-    const effectiveDeliveryFee =
-      order.orderType === 'ENTREGA'
-        ? getDeliveryFeeByNeighborhood(order.address?.neighborhood || '', 10.0)
-        : 0;
-
-    if (effectiveDeliveryFee > 0) {
+    const deliveryFee = Number(targetOrder.delivery_fee ?? targetOrder.deliveryFee ?? 0);
+    if (deliveryFee > 0) {
       items.push({
         id: 'delivery-fee',
-        title: `Taxa de Entrega (${order.address?.neighborhood || 'Praia Grande'})`,
-        description: 'Entrega rápida no endereço informado',
+        title: `Taxa de Entrega (${targetOrder.neighborhood || targetOrder.address?.neighborhood || 'Praia Grande'})`,
+        description: 'Entrega refrigerada no endereço informado',
         quantity: 1,
         currency_id: 'BRL',
-        unit_price: Number(effectiveDeliveryFee)
+        unit_price: deliveryFee
       });
     }
 
-    const calculatedTotal = Number(items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0).toFixed(2));
-    const effectiveTotal = calculatedTotal > 0 ? calculatedTotal : total;
-    const finalItems =
-      items.length > 0 && calculatedTotal > 0
-        ? items
-        : [
-            {
-              id: order.id,
-              title: `Pedido ${order.id} - Açaí do Luky`,
-              description: 'Açaí artesanal montado com acompanhamentos',
-              quantity: 1,
-              currency_id: 'BRL',
-              unit_price: effectiveTotal
-            }
-          ];
+    const calculatedSum = Number(items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0).toFixed(2));
+    const finalItems = (items.length > 0 && Math.abs(calculatedSum - officialTotal) < 0.05)
+      ? items
+      : [
+          {
+            id: targetOrder.id || order.id,
+            title: `Pedido ${targetOrder.id || order.id} - Açaí do Luky`,
+            description: 'Açaí artesanal montado com acompanhamentos',
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: officialTotal
+          }
+        ];
 
-    const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
-    const areaCode = cleanPhone.length >= 10 ? cleanPhone.substring(0, 2) : '13';
-    const phoneNumber = cleanPhone.length >= 10 ? cleanPhone.substring(2) : cleanPhone;
+    const customerPhone = String(targetOrder.customer_phone || targetOrder.customerPhone || order.customerPhone || '').replace(/\D/g, '');
+    const customerName = String(targetOrder.customer_name || targetOrder.customerName || order.customerName || 'Cliente Açaí do Luky');
+    const areaCode = customerPhone.length >= 10 ? customerPhone.substring(0, 2) : '13';
+    const phoneNumber = customerPhone.length >= 10 ? customerPhone.substring(2) : customerPhone;
 
     const preferencePayload = {
       items: finalItems,
       payer: {
-        name: order.customerName || 'Cliente Açaí do Luky',
+        name: customerName,
         phone: {
           area_code: areaCode,
           number: phoneNumber
         }
       },
       back_urls: {
-        success: `${baseOrigin}/?mp_status=approved&order_id=${encodeURIComponent(order.id)}`,
-        pending: `${baseOrigin}/?mp_status=pending&order_id=${encodeURIComponent(order.id)}`,
-        failure: `${baseOrigin}/?mp_status=failure&order_id=${encodeURIComponent(order.id)}`
+        success: `${baseOrigin}/?mp_status=approved&order_id=${encodeURIComponent(targetOrder.id || order.id)}`,
+        pending: `${baseOrigin}/?mp_status=pending&order_id=${encodeURIComponent(targetOrder.id || order.id)}`,
+        failure: `${baseOrigin}/?mp_status=failure&order_id=${encodeURIComponent(targetOrder.id || order.id)}`
       },
       auto_return: 'approved',
       notification_url: `${webhookOrigin}/api/mercadopago/webhook`,
-      external_reference: order.id,
+      external_reference: targetOrder.id || order.id,
       statement_descriptor: 'ACAI DO LUKY',
       expires: false
     };

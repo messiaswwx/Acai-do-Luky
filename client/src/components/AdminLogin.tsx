@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff, ArrowLeft, KeyRound, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { isSupabaseConfigured } from '../utils/supabase';
-import { adminLoginRPC } from '../services/supabaseService';
+import { adminLoginRPC, setAdminSessionToken } from '../services/supabaseService';
 import { ThemeToggle } from './ThemeToggle';
 
 interface AdminLoginProps {
@@ -110,6 +110,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
 
       if (data && data.success) {
         // PIN correto! Acesso liberado
+        if (data.sessionToken) {
+          setAdminSessionToken(data.sessionToken);
+        }
         if (data.deviceToken) {
           localStorage.setItem(DEVICE_TOKEN_KEY, data.deviceToken);
         }

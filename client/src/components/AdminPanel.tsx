@@ -15,7 +15,8 @@ import {
   saveInventoryItem,
   subscribeToInventory,
   confirmOrderPayment,
-  subscribeToOrderBroadcastEvents
+  subscribeToOrderBroadcastEvents,
+  getAdminSessionToken
 } from '../services/supabaseService';
 import { checkOrderPaymentStatus } from '../services/mercadopagoService';
 import { PrintReceipt } from './PrintReceipt';
@@ -72,6 +73,9 @@ const MONTH_NAMES = [
   'Novembro',
   'Dezembro'
 ];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth();
 
 interface AdminPanelProps {
   settings: StoreSettings;
@@ -150,7 +154,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           return;
         }
       }
-      const res = await fetch('/api/orders');
+      const res = await fetch('/api/orders', {
+        headers: { 'x-admin-session': getAdminSessionToken() }
+      });
       if (res.ok) {
         const data = await res.json();
         setOrders(data);
@@ -428,7 +434,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       await fetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-session': getAdminSessionToken()
+        },
         body: JSON.stringify({ 
           status: newStatus,
           notes: cancellationReason ? `[RECUSADO: ${cancellationReason}]` : undefined
@@ -675,8 +684,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       .reduce((acc, o) => acc + o.total, 0);
   }, [orders]);
 
-  const currentYear = useMemo(() => new Date().getFullYear(), []);
-  const currentMonth = useMemo(() => new Date().getMonth(), []);
+  const currentYear = CURRENT_YEAR;
+  const currentMonth = CURRENT_MONTH;
 
   const availableRevenueYears = useMemo(() => {
     const yearsSet = new Set<number>([currentYear, selectedRevenueYear]);
@@ -1701,15 +1710,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
 
                     <div className="flex items-center gap-2">
-                      <a
-                        href={`https://wa.me/55${order.customerPhone.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>WhatsApp</span>
-                      </a>
+                      {(() => {
+                        const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
+                        const waPhone = cleanPhone.startsWith('55') && cleanPhone.length >= 12 ? cleanPhone : `55${cleanPhone}`;
+                        return (
+                          <a
+                            href={`https://wa.me/${waPhone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </a>
+                        );
+                      })()}
 
                       <button
                         onClick={() => setSelectedOrderForPrint(order)}

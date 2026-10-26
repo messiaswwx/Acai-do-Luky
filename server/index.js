@@ -56,10 +56,10 @@ const DEFAULT_DATA = {
   },
   menu: {
     sizes: [
-      { id: "size-300", name: "Copo 300ml", description: "Perfeito para matar aquela vontade de forma rápida e refrescante.", price: 14.00, originalPrice: 14.00, discountPercent: 0, maxFreeToppings: 3, available: true },
-      { id: "size-500", name: "Copo 500ml", description: "O queridinho da galera! Equilíbrio ideal entre açaí e acompanhamentos.", price: 17.00, originalPrice: 20.00, discountPercent: 15, maxFreeToppings: 3, available: true },
-      { id: "size-700", name: "Copo 700ml", description: "Tamanho caprichado para quem ama açaí de verdade.", price: 26.00, originalPrice: 26.00, discountPercent: 0, maxFreeToppings: 4, available: true },
-      { id: "size-1000", name: "Barca Especial 1 Litro", description: "Serve até 3 pessoas com muita fartura, amor e recheio!", price: 45.00, originalPrice: 45.00, discountPercent: 0, maxFreeToppings: 5, available: true }
+      { id: "size-300", name: "Copo 300ml", description: "Perfeito para matar aquela vontade de forma rápida e refrescante.", price: 14.00, originalPrice: 14.00, discountPercent: 0, maxComplements: 2, maxFruits: 1, maxSyrups: 1, maxFreeToppings: 3, available: true },
+      { id: "size-500", name: "Copo 500ml", description: "O queridinho da galera! Equilíbrio ideal entre açaí e acompanhamentos.", price: 17.00, originalPrice: 20.00, discountPercent: 15, maxComplements: 2, maxFruits: 2, maxSyrups: 1, maxFreeToppings: 4, available: true },
+      { id: "size-700", name: "Copo 700ml", description: "Tamanho caprichado para quem ama açaí de verdade.", price: 26.00, originalPrice: 26.00, discountPercent: 0, maxComplements: 3, maxFruits: 2, maxSyrups: 1, maxFreeToppings: 5, available: true },
+      { id: "size-1000", name: "Barca Especial 1 Litro", description: "Serve até 3 pessoas com muita fartura, amor e recheio!", price: 45.00, originalPrice: 45.00, discountPercent: 0, maxComplements: 3, maxFruits: 3, maxSyrups: 1, maxFreeToppings: 6, available: true }
     ],
     bases: [
       { id: "base-tradicional", name: "Açaí Tradicional Cremoso", available: true },
@@ -69,11 +69,28 @@ const DEFAULT_DATA = {
     ],
     freeToppings: [
       { id: "free-ninho", name: "Leite Ninho em Pó", available: true },
+      { id: "free-leite-po", name: "Leite em Pó", available: true },
       { id: "free-granola", name: "Granola Crocante", available: true },
       { id: "free-pacoca", name: "Paçoca de Amendoim", available: true },
       { id: "free-banana", name: "Banana Fresca Fatiada", available: true },
       { id: "free-aveia", name: "Aveia em Flocos", available: true },
-      { id: "free-sucrilhos", name: "Sucrilhos de Milho", available: true }
+      { id: "free-sucrilhos", name: "Sucrilhos de Milho", available: true },
+      { id: "free-disqueti", name: "Disqueti", available: true },
+      { id: "free-chocoball", name: "Chocoball", available: true },
+      { id: "free-jujuba", name: "Jujuba", available: true },
+      { id: "free-amendoim", name: "Amendoim Triturado", available: true },
+      { id: "fruit-banana", name: "Banana", available: true },
+      { id: "fruit-morango", name: "Morango", available: true },
+      { id: "fruit-kiwi", name: "Kiwi", available: true },
+      { id: "fruit-manga", name: "Manga", available: true },
+      { id: "fruit-uva", name: "Uva", available: true }
+    ],
+    fruits: [
+      { id: "fruit-banana", name: "Banana", available: true },
+      { id: "fruit-morango", name: "Morango", available: true },
+      { id: "fruit-kiwi", name: "Kiwi", available: true },
+      { id: "fruit-manga", name: "Manga", available: true },
+      { id: "fruit-uva", name: "Uva", available: true }
     ],
     premiumToppings: [
       { id: "prem-morango", name: "Morango Fresco Fatiado", price: 4.50, available: true },
@@ -88,6 +105,7 @@ const DEFAULT_DATA = {
       { id: "syrup-condensado", name: "Leite Condensado", available: true },
       { id: "syrup-chocolate", name: "Calda de Chocolate", available: true },
       { id: "syrup-morango", name: "Calda de Morango", available: true },
+      { id: "syrup-caramelo", name: "Calda de Caramelo", available: true },
       { id: "syrup-mel", name: "Mel de Abelha Puro", available: true }
     ]
   },
@@ -152,6 +170,15 @@ function requireAdminAuth(req, res, next) {
     return res.status(401).json({ error: 'Sessão administrativa expirada. Faça login novamente.', unauthorized: true });
   }
   next();
+}
+
+function sanitizeString(val, maxLen = 180) {
+  if (val === undefined || val === null) return '';
+  return String(val)
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, maxLen);
 }
 
 function getClientIdentifier(req) {

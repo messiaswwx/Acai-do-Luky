@@ -93,6 +93,18 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
 
+  // Load orders for customer
+  const loadOrders = useCallback(async (phone: string) => {
+    if (!phone) return;
+    setLoadingOrders(true);
+    try {
+      const fetched = await fetchCustomerOrders(phone);
+      setOrders(fetched);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, []);
+
   // Sync edit form when customer changes
   useEffect(() => {
     if (customer) {
@@ -122,19 +134,7 @@ export const CustomerDrawer: React.FC<CustomerDrawerProps> = ({
     } else {
       setOrders([]);
     }
-  }, [customer]);
-
-  // Load orders for customer
-  const loadOrders = useCallback(async (phone: string) => {
-    if (!phone) return;
-    setLoadingOrders(true);
-    try {
-      const fetched = await fetchCustomerOrders(phone);
-      setOrders(fetched);
-    } finally {
-      setLoadingOrders(false);
-    }
-  }, []);
+  }, [customer, loadOrders]);
 
   // Realtime subscription for customer orders
   useEffect(() => {

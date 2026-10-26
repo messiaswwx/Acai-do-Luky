@@ -25,7 +25,8 @@ import {
   subscribeToMenuData,
   fetchOrderById,
   subscribeToOrder,
-  adminLogout
+  adminLogout,
+  getAdminSessionToken
 } from './services/supabaseService';
 import { playCancellationAlert } from './utils/audio';
 import { 
@@ -157,6 +158,7 @@ const INITIAL_MENU: MenuData = {
 
 const CACHED_SETTINGS_KEY = 'luky_cached_settings';
 const CACHED_MENU_KEY = 'luky_cached_menu';
+const CURRENT_YEAR = new Date().getFullYear();
 
 function getInitialStoreSettings(): StoreSettings {
   if (typeof window !== 'undefined') {
@@ -212,11 +214,16 @@ export function sanitizeOrder(obj: unknown): Order | null {
   const orderType = o.orderType === 'RETIRADA' ? 'RETIRADA' : 'ENTREGA';
   const address = o.address && typeof o.address === 'object' ? (o.address as any) : undefined;
   const subtotal = Number(o.subtotal) || 0;
-  const deliveryFee =
-    orderType === 'ENTREGA'
+  const hasSavedDeliveryFee = o.deliveryFee !== undefined && o.deliveryFee !== null && !Number.isNaN(Number(o.deliveryFee));
+  const deliveryFee = hasSavedDeliveryFee
+    ? Number(o.deliveryFee)
+    : orderType === 'ENTREGA'
       ? getDeliveryFeeByNeighborhood(String(address?.neighborhood || ''), 10.00)
       : 0;
-  const total = Number((subtotal + deliveryFee).toFixed(2));
+  const hasSavedTotal = o.total !== undefined && o.total !== null && Number(o.total) > 0;
+  const total = hasSavedDeliveryFee && hasSavedTotal
+    ? Number(o.total)
+    : Number((subtotal + deliveryFee).toFixed(2));
 
   return {
     id,
@@ -586,7 +593,10 @@ export default function App() {
     try {
       await fetch('/api/settings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-session': getAdminSessionToken()
+        },
         body: JSON.stringify(newSettings)
       });
     } catch {
@@ -605,7 +615,10 @@ export default function App() {
     try {
       await fetch('/api/menu', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-session': getAdminSessionToken()
+        },
         body: JSON.stringify(newMenu)
       });
     } catch {
@@ -970,15 +983,21 @@ export default function App() {
                         </span>
                       </div>
 
-                      <a
-                        href={`https://wa.me/55${String(settings?.whatsapp || '').replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-amber-300 hover:text-amber-200 bg-white/10 hover:bg-white/15 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/10 transition-colors"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>WhatsApp da Loja</span>
-                      </a>
+                      {(() => {
+                        const cleanPhone = String(settings?.whatsapp || '').replace(/\D/g, '');
+                        const waPhone = cleanPhone.startsWith('55') && cleanPhone.length >= 12 ? cleanPhone : `55${cleanPhone}`;
+                        return (
+                          <a
+                            href={`https://wa.me/${waPhone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-amber-300 hover:text-amber-200 bg-white/10 hover:bg-white/15 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/10 transition-colors"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>WhatsApp da Loja</span>
+                          </a>
+                        );
+                      })()}
                     </div>
 
                     {/* Logo + Headline */}
@@ -1217,7 +1236,7 @@ export default function App() {
                     </button>
                   </div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    © {new Date().getFullYear()} {settings.storeName} - Todos os direitos reservados.
+                    © {CURRENT_YEAR} {settings.storeName} - Todos os direitos reservados.
                   </p>
                 </footer>
               </main>

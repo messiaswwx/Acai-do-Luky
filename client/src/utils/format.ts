@@ -19,6 +19,15 @@ export function formatDateTime(isoString?: string | null): string {
   }
 }
 
+export function formatWhatsAppPhone(rawPhone?: string | null): string {
+  const digits = String(rawPhone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55') && digits.length >= 12) {
+    return digits;
+  }
+  return `55${digits}`;
+}
+
 export function generateWhatsAppMessage(order: Order, _storePhone?: string): string {
   try {
     const lines: string[] = [];

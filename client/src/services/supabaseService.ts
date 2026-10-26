@@ -27,9 +27,9 @@ export function getAdminSessionToken(): string {
 export function setAdminSessionToken(token: string) {
   try {
     sessionStorage.setItem(ADMIN_SESSION_KEY, token);
+    sessionStorage.setItem('luky_admin_unlocked', 'true');
     // Limpa resquícios do modelo antigo (PIN em texto puro no navegador)
     sessionStorage.removeItem('luky_admin_pin');
-    sessionStorage.removeItem('luky_admin_unlocked');
   } catch {
     // ignore
   }
@@ -465,11 +465,29 @@ export function parseOrderRow(row: any): Order {
   const effectiveOrderType = (row.delivery_type || row.orderType || 'ENTREGA') as 'ENTREGA' | 'RETIRADA';
   const rawSubtotal = Number(row.subtotal) || 0;
   const neighborhoodName = parsedAddress?.neighborhood || String(row.neighborhood || '');
+
+  const rawSavedDeliveryFee = row.delivery_fee ?? row.deliveryFee;
+  const hasSavedDeliveryFee =
+    rawSavedDeliveryFee !== undefined &&
+    rawSavedDeliveryFee !== null &&
+    !Number.isNaN(Number(rawSavedDeliveryFee));
+
   const calculatedDeliveryFee =
     effectiveOrderType === 'ENTREGA'
-      ? getDeliveryFeeByNeighborhood(neighborhoodName, 10.00)
+      ? (hasSavedDeliveryFee && Number(rawSavedDeliveryFee) >= 0
+          ? Number(rawSavedDeliveryFee)
+          : getDeliveryFeeByNeighborhood(neighborhoodName, 10.00))
       : 0;
-  const calculatedTotal = Number((rawSubtotal + calculatedDeliveryFee).toFixed(2));
+
+  const hasSavedTotal =
+    row.total !== undefined &&
+    row.total !== null &&
+    !Number.isNaN(Number(row.total)) &&
+    Number(row.total) > 0;
+
+  const calculatedTotal = hasSavedTotal
+    ? Number(Number(row.total).toFixed(2))
+    : Number((rawSubtotal + calculatedDeliveryFee).toFixed(2));
 
   return {
     id: row.id,

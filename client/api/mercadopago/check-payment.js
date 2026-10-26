@@ -13,6 +13,27 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmd2dldmtncWVvZW5mcHJldHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDA3NDIsImV4cCI6MjEwODExNjc0Mn0.sKHLJxnjctSwCZAwrOOZNrpfsum3NAxGbW3ek_luhC4';
 
+async function fetchOfficialOrder(orderId) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !orderId) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_get_order`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_order_id: orderId })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // fallback
+  }
+  return null;
+}
+
 async function syncApprovedPaymentToSupabase(orderId, paymentId) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !orderId) return;
   try {
@@ -107,14 +128,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ isPaid: false, status: 'not_found' });
     }
 
-    const isPaid = payment.status === 'approved';
+    let isPaid = payment.status === 'approved';
+
+    // Valida se o valor pago é compatível com o pedido oficial para evitar fraudes
+    if (isPaid && payment.transaction_amount !== undefined) {
+      const dbOrder = await fetchOfficialOrder(orderId);
+      if (dbOrder && dbOrder.total !== undefined) {
+        const expectedTotal = Number(dbOrder.total) || 0;
+        const paidAmount = Number(payment.transaction_amount) || 0;
+        if (paidAmount < expectedTotal - 0.10) {
+          console.warn(`[Mercado Pago] Valor divergente para pedido ${orderId}: esperado R$ ${expectedTotal}, pago R$ ${paidAmount}`);
+          isPaid = false;
+        }
+      }
+    }
+
     if (isPaid) {
       await syncApprovedPaymentToSupabase(orderId, payment.id);
     }
 
     return res.status(200).json({
       isPaid,
-      status: payment.status,
+      status: isPaid ? 'approved' : payment.status,
       statusDetail: payment.status_detail,
       paymentId: payment.id,
       paymentMethodId: payment.payment_method_id,

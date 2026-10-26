@@ -15,7 +15,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+    <div id="print-receipt-modal" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Actions bar (hidden in print) */}
         <div className="p-3 bg-slate-900 text-white flex items-center justify-between print:hidden">
@@ -38,7 +38,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({ order, settings, onC
         </div>
 
         {/* Printable Ticket Area */}
-        <div className="p-6 overflow-y-auto font-mono text-xs text-black leading-tight space-y-3 bg-white">
+        <div id="print-receipt-content" className="p-6 overflow-y-auto font-mono text-xs text-black leading-tight space-y-3 bg-white">
           <div className="text-center space-y-1 border-b border-dashed border-black pb-3">
             <img src="/logo.png" alt="Logo" className="w-14 h-14 rounded-full mx-auto mb-2 object-contain" />
             <h1 className="font-bold text-base uppercase">{settings.storeName}</h1>

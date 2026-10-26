@@ -186,6 +186,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
+    if (settings.minOrderValue > 0 && subtotal < settings.minOrderValue) {
+      setErrorMsg(`O valor mínimo para pedidos é de ${formatCurrency(settings.minOrderValue)} (subtotal atual: ${formatCurrency(subtotal)}). Adicione mais itens para continuar!`);
+      return;
+    }
+
     if (!customerName.trim()) {
       setErrorMsg('Por favor, informe seu nome completo.');
       return;

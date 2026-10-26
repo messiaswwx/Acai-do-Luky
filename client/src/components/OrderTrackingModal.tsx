@@ -362,7 +362,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
   const handleWhatsAppRedirect = () => {
     const rawPhone = settings?.whatsapp || '11999999999';
-    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const cleanPhone = String(rawPhone || '').replace(/\D/g, '');
+    const waPhone = cleanPhone.startsWith('55') && cleanPhone.length >= 12 ? cleanPhone : `55${cleanPhone}`;
     let text = '';
     if (isCancelled) {
       text = encodeURIComponent(`Olá Luky! Vi o aviso de que meu pedido *${orderId}* não pôde ser aceito. Gostaria de tirar uma dúvida!`);
@@ -374,7 +375,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
       }
     }
     if (cleanPhone) {
-      window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
+      window.open(`https://wa.me/${waPhone}?text=${text}`, '_blank');
     }
   };
 

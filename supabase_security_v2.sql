@@ -898,19 +898,26 @@ BEGIN
       RETURN jsonb_build_object('success', false, 'error', 'Uma base do seu carrinho não está mais disponível.');
     END IF;
 
-    -- Acompanhamentos grátis (respeitando o limite do tamanho)
+    -- Acompanhamentos grátis (respeitando o limite do tamanho: complementos + frutas)
     v_free := '[]'::jsonb;
     IF jsonb_typeof(v_item -> 'freeToppings') = 'array' THEN
       FOR v_tmp IN SELECT * FROM jsonb_array_elements(v_item -> 'freeToppings') LOOP
         SELECT e INTO v_found FROM jsonb_array_elements(v_menu -> 'freeToppings') e
         WHERE e ->> 'id' = v_tmp ->> 'id' AND COALESCE((e ->> 'available')::BOOLEAN, true) LIMIT 1;
         IF v_found IS NULL THEN
+          SELECT e INTO v_found FROM jsonb_array_elements(COALESCE(v_menu -> 'fruits', '[]'::jsonb)) e
+          WHERE e ->> 'id' = v_tmp ->> 'id' AND COALESCE((e ->> 'available')::BOOLEAN, true) LIMIT 1;
+        END IF;
+        IF v_found IS NULL THEN
           RETURN jsonb_build_object('success', false, 'error', 'Acompanhamento indisponível no carrinho.');
         END IF;
         v_free := v_free || jsonb_build_array(v_found);
       END LOOP;
     END IF;
-    IF jsonb_array_length(v_free) > COALESCE(public._safe_numeric(v_size ->> 'maxFreeToppings'), 0) THEN
+    IF jsonb_array_length(v_free) > GREATEST(
+      COALESCE(public._safe_numeric(v_size ->> 'maxFreeToppings'), 0),
+      COALESCE(public._safe_numeric(v_size ->> 'maxComplements'), 2) + COALESCE(public._safe_numeric(v_size ->> 'maxFruits'), 1)
+    ) THEN
       RETURN jsonb_build_object('success', false, 'error', 'Acompanhamentos grátis acima do limite do tamanho.');
     END IF;
 
@@ -936,6 +943,10 @@ BEGIN
       FOR v_tmp IN SELECT * FROM jsonb_array_elements(v_item -> 'fruits') LOOP
         SELECT e INTO v_found FROM jsonb_array_elements(COALESCE(v_menu -> 'fruits', '[]'::jsonb)) e
         WHERE e ->> 'id' = v_tmp ->> 'id' AND COALESCE((e ->> 'available')::BOOLEAN, true) LIMIT 1;
+        IF v_found IS NULL THEN
+          SELECT e INTO v_found FROM jsonb_array_elements(v_menu -> 'freeToppings') e
+          WHERE e ->> 'id' = v_tmp ->> 'id' AND COALESCE((e ->> 'available')::BOOLEAN, true) LIMIT 1;
+        END IF;
         IF v_found IS NOT NULL THEN
           v_fruits := v_fruits || jsonb_build_array(v_found);
         END IF;
