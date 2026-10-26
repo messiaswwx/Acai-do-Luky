@@ -49,10 +49,29 @@ import {
   PackageCheck,
   Sparkles,
   Pencil,
-  Lock
+  Lock,
+  Calendar,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from './ThemeToggle';
+
+const MONTH_NAMES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro'
+];
 
 interface AdminPanelProps {
   settings: StoreSettings;
@@ -74,7 +93,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onToggleTheme
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'CARDAPIO' | 'ESTOQUE' | 'CONFIGURACOES'>('PEDIDOS');
+  const [activeTab, setActiveTab] = useState<'PEDIDOS' | 'FATURAMENTO' | 'CARDAPIO' | 'ESTOQUE' | 'CONFIGURACOES'>('PEDIDOS');
+  const [selectedRevenueYear, setSelectedRevenueYear] = useState<number>(() => new Date().getFullYear());
+  const [selectedRevenueMonth, setSelectedRevenueMonth] = useState<number>(() => new Date().getMonth());
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<Order | null>(null);
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'TODOS'>('TODOS');
@@ -654,6 +675,118 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       .reduce((acc, o) => acc + o.total, 0);
   }, [orders]);
 
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentMonth = useMemo(() => new Date().getMonth(), []);
+
+  const availableRevenueYears = useMemo(() => {
+    const yearsSet = new Set<number>([currentYear, selectedRevenueYear]);
+    for (const o of orders) {
+      if (o.createdAt) {
+        const d = new Date(o.createdAt);
+        if (!Number.isNaN(d.getTime())) {
+          yearsSet.add(d.getFullYear());
+        }
+      }
+    }
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [orders, currentYear, selectedRevenueYear]);
+
+  const monthlyRevenueStats = useMemo(() => {
+    const months = MONTH_NAMES.map((name, monthIndex) => ({
+      monthIndex,
+      monthName: name,
+      shortName: name.slice(0, 3),
+      revenue: 0,
+      validOrdersCount: 0,
+      cancelledOrdersCount: 0,
+      averageTicket: 0,
+      deliveryRevenue: 0,
+      deliveryCount: 0,
+      pickupCount: 0,
+      byPayment: {
+        PIX: { revenue: 0, count: 0 },
+        MERCADO_PAGO: { revenue: 0, count: 0 },
+        CARTAO_ENTREGA: { revenue: 0, count: 0 },
+        DINHEIRO: { revenue: 0, count: 0 }
+      },
+      orders: [] as Order[]
+    }));
+
+    for (const order of orders) {
+      if (!order.createdAt) continue;
+      const d = new Date(order.createdAt);
+      if (Number.isNaN(d.getTime())) continue;
+      if (d.getFullYear() !== selectedRevenueYear) continue;
+
+      const mIdx = d.getMonth();
+      const bucket = months[mIdx];
+      if (!bucket) continue;
+
+      bucket.orders.push(order);
+
+      if (order.status === 'CANCELADO') {
+        bucket.cancelledOrdersCount += 1;
+      } else {
+        bucket.revenue = Number((bucket.revenue + (Number(order.total) || 0)).toFixed(2));
+        bucket.validOrdersCount += 1;
+        bucket.deliveryRevenue = Number((bucket.deliveryRevenue + (Number(order.deliveryFee) || 0)).toFixed(2));
+        if (order.orderType === 'RETIRADA') {
+          bucket.pickupCount += 1;
+        } else {
+          bucket.deliveryCount += 1;
+        }
+
+        const pm =
+          order.paymentMethod === 'MERCADO_PAGO' || order.paymentMethod === 'CARTAO_ONLINE'
+            ? 'MERCADO_PAGO'
+            : order.paymentMethod === 'CARTAO_ENTREGA'
+            ? 'CARTAO_ENTREGA'
+            : order.paymentMethod === 'DINHEIRO'
+            ? 'DINHEIRO'
+            : 'PIX';
+
+        bucket.byPayment[pm].revenue = Number((bucket.byPayment[pm].revenue + (Number(order.total) || 0)).toFixed(2));
+        bucket.byPayment[pm].count += 1;
+      }
+    }
+
+    let yearTotalRevenue = 0;
+    let yearValidOrdersCount = 0;
+    let yearCancelledOrdersCount = 0;
+    let maxMonthRevenue = 0;
+    let bestMonthName = '—';
+    let bestMonthRevenue = 0;
+
+    for (const m of months) {
+      m.averageTicket = m.validOrdersCount > 0 ? Number((m.revenue / m.validOrdersCount).toFixed(2)) : 0;
+      m.orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      yearTotalRevenue = Number((yearTotalRevenue + m.revenue).toFixed(2));
+      yearValidOrdersCount += m.validOrdersCount;
+      yearCancelledOrdersCount += m.cancelledOrdersCount;
+      if (m.revenue > maxMonthRevenue) {
+        maxMonthRevenue = m.revenue;
+        bestMonthName = m.monthName;
+        bestMonthRevenue = m.revenue;
+      }
+    }
+
+    const yearAverageTicket =
+      yearValidOrdersCount > 0 ? Number((yearTotalRevenue / yearValidOrdersCount).toFixed(2)) : 0;
+
+    return {
+      months,
+      yearTotalRevenue,
+      yearValidOrdersCount,
+      yearCancelledOrdersCount,
+      yearAverageTicket,
+      maxMonthRevenue,
+      bestMonthName,
+      bestMonthRevenue
+    };
+  }, [orders, selectedRevenueYear]);
+
+  const activeMonthData = monthlyRevenueStats.months[selectedRevenueMonth] || monthlyRevenueStats.months[0];
+
   const pendingOrders = useMemo(() => orders.filter(o => o.status === 'NOVO'), [orders]);
   const inPrepOrders = useMemo(() => orders.filter(o => o.status === 'PREPARANDO'), [orders]);
 
@@ -752,15 +885,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveTab('FATURAMENTO')}
+          title="Clique para ver o faturamento detalhado de todos os 12 meses"
+          className={`text-left bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0 transition-all cursor-pointer group ${
+            activeTab === 'FATURAMENTO'
+              ? 'border-purple-600 dark:border-amber-400 ring-2 ring-purple-500/20 dark:ring-amber-400/20'
+              : 'border-slate-200 dark:border-slate-800 hover:border-purple-400 dark:hover:border-purple-700'
+          }`}
+        >
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="min-w-0">
-            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase block truncate">Faturamento</span>
-            <div className="text-base sm:text-lg font-black text-purple-950 dark:text-amber-400 truncate">{formatCurrency(totalRevenue)}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase block truncate">
+                Faturamento ({activeMonthData.shortName})
+              </span>
+              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-amber-300 shrink-0">
+                Ver meses
+              </span>
+            </div>
+            <div className="text-base sm:text-lg font-black text-purple-950 dark:text-amber-400 truncate">
+              {formatCurrency(activeMonthData.revenue)}
+            </div>
+            <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 truncate">
+              Total geral: {formatCurrency(totalRevenue)}
+            </div>
           </div>
-        </div>
+        </button>
 
         <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
@@ -793,8 +947,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* Navigation Tabs - 2x2 proportional grid on mobile, horizontal bar on desktop */}
-      <div className="grid grid-cols-2 sm:flex sm:border-b sm:border-purple-200 dark:sm:border-purple-900/60 gap-2">
+      {/* Navigation Tabs - proportional grid on mobile, horizontal bar on desktop */}
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:border-b sm:border-purple-200 dark:sm:border-purple-900/60 gap-2">
         <button
           onClick={() => setActiveTab('PEDIDOS')}
           className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
@@ -811,6 +965,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {pendingOrders.length}
             </span>
           )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('FATURAMENTO')}
+          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
+            activeTab === 'FATURAMENTO'
+              ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Calendar className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Faturamento por Mês</span>
+          <span className="sm:hidden truncate">Faturamento</span>
         </button>
 
         <button
@@ -846,7 +1013,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           onClick={() => setActiveTab('CONFIGURACOES')}
-          className={`py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
+          className={`col-span-2 sm:col-span-1 py-2.5 px-3 sm:pb-3 sm:px-4 rounded-xl sm:rounded-none font-black text-xs sm:text-sm flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 border sm:border-0 sm:border-b-2 transition-colors cursor-pointer ${
             activeTab === 'CONFIGURACOES'
               ? 'bg-purple-900 text-amber-300 border-purple-900 sm:bg-transparent sm:border-purple-800 dark:sm:border-amber-400 sm:text-purple-950 dark:sm:text-amber-300'
               : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 sm:bg-transparent sm:border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -856,6 +1023,315 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <span className="truncate">Configurações</span>
         </button>
       </div>
+
+      {/* TAB: FATURAMENTO MENSAL (TODOS OS 12 MESES) */}
+      {activeTab === 'FATURAMENTO' && (
+        <div className="space-y-5">
+          {/* Cabeçalho & Seletor de Ano */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-slate-800 dark:text-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-purple-700 dark:text-amber-400" />
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                  Faturamento de Todos os Meses ({selectedRevenueYear})
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Acompanhe o faturamento mês a mês (Janeiro a Dezembro). Clique em qualquer mês para ver o resumo detalhado.
+              </p>
+            </div>
+
+            {/* Controle de Ano */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setSelectedRevenueYear(prev => prev - 1)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                title="Ano anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-1 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 px-3 py-1.5 rounded-xl">
+                <Calendar className="w-4 h-4 text-purple-700 dark:text-amber-400" />
+                <select
+                  value={selectedRevenueYear}
+                  onChange={e => setSelectedRevenueYear(Number(e.target.value))}
+                  className="bg-transparent font-black text-sm text-purple-950 dark:text-amber-300 focus:outline-hidden cursor-pointer"
+                >
+                  {availableRevenueYears.map(yr => (
+                    <option key={yr} value={yr} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      Ano {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRevenueYear(prev => prev + 1)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                title="Próximo ano"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Cards de Destaque do Ano e Mês Selecionado */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-gradient-to-br from-purple-900 via-purple-800 to-purple-950 text-white p-4 rounded-2xl shadow-md border border-purple-700">
+              <span className="text-[11px] font-bold uppercase text-purple-200 block">
+                Mês Selecionado • {activeMonthData.monthName}
+              </span>
+              <div className="text-2xl font-black text-amber-300 mt-1">
+                {formatCurrency(activeMonthData.revenue)}
+              </div>
+              <div className="text-xs text-purple-200 mt-1 flex items-center justify-between">
+                <span>{activeMonthData.validOrdersCount} pedido(s) válido(s)</span>
+                {activeMonthData.cancelledOrdersCount > 0 && (
+                  <span className="text-red-300">{activeMonthData.cancelledOrdersCount} cancelado(s)</span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 block">
+                Acumulado no Ano ({selectedRevenueYear})
+              </span>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {formatCurrency(monthlyRevenueStats.yearTotalRevenue)}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {monthlyRevenueStats.yearValidOrdersCount} pedido(s) válido(s) no ano
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 block">
+                Ticket Médio ({activeMonthData.monthName})
+              </span>
+              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
+                {formatCurrency(activeMonthData.averageTicket)}
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Média anual: {formatCurrency(monthlyRevenueStats.yearAverageTicket)}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-300 dark:border-amber-800/70 bg-amber-50/30 dark:bg-amber-950/20 shadow-xs">
+              <span className="text-[11px] font-bold uppercase text-amber-800 dark:text-amber-300 block">
+                Melhor Mês de {selectedRevenueYear}
+              </span>
+              <div className="text-xl font-black text-purple-950 dark:text-amber-400 mt-1 truncate">
+                {monthlyRevenueStats.bestMonthName}
+              </div>
+              <div className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">
+                {formatCurrency(monthlyRevenueStats.bestMonthRevenue)}
+              </div>
+            </div>
+          </div>
+
+          {/* Grade dos 12 Meses (Janeiro a Dezembro) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-purple-700 dark:text-amber-400" />
+                <span>Tabela de Faturamento — Todos os 12 Meses ({selectedRevenueYear})</span>
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Toque em um mês para ver os pagamentos e pedidos daquele mês
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {monthlyRevenueStats.months.map(m => {
+                const isCurrentCalendarMonth =
+                  selectedRevenueYear === currentYear && m.monthIndex === currentMonth;
+                const isSelected = selectedRevenueMonth === m.monthIndex;
+                const barPercent =
+                  monthlyRevenueStats.maxMonthRevenue > 0
+                    ? Math.round((m.revenue / monthlyRevenueStats.maxMonthRevenue) * 100)
+                    : 0;
+
+                return (
+                  <button
+                    key={m.monthName}
+                    type="button"
+                    onClick={() => setSelectedRevenueMonth(m.monthIndex)}
+                    className={`text-left p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                      isSelected
+                        ? 'border-purple-700 dark:border-amber-400 bg-purple-50/60 dark:bg-purple-950/40 shadow-md ring-2 ring-purple-500/20 dark:ring-amber-400/20'
+                        : m.revenue > 0
+                        ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-purple-300 dark:hover:border-purple-700'
+                        : 'border-slate-100 dark:border-slate-800/60 bg-slate-50/60 dark:bg-slate-900/50 opacity-80 hover:opacity-100'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                            {String(m.monthIndex + 1).padStart(2, '0')}.
+                          </span>
+                          {m.monthName}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {isCurrentCalendarMonth && (
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-400 text-purple-950">
+                              Atual
+                            </span>
+                          )}
+                          {isSelected && (
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-900 text-amber-300 dark:bg-amber-400/20 dark:text-amber-300">
+                              Aberto
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={`text-xl font-black mt-2 ${
+                        m.revenue > 0
+                          ? 'text-purple-950 dark:text-amber-400'
+                          : 'text-slate-400 dark:text-slate-600'
+                      }`}>
+                        {formatCurrency(m.revenue)}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {/* Barra proporcional */}
+                      <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-700 to-amber-500 rounded-full transition-all duration-300"
+                          style={{ width: `${barPercent}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                        <span>{m.validOrdersCount} pedido(s)</span>
+                        <span>Ticket: {formatCurrency(m.averageTicket)}</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Detalhamento do Mês Selecionado */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                  Resumo Detalhado de {activeMonthData.monthName} de {selectedRevenueYear}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Divisão por meio de pagamento, entregas ({activeMonthData.deliveryCount}) vs. retiradas ({activeMonthData.pickupCount}) e histórico do mês.
+                </p>
+              </div>
+              <div className="text-xs font-bold bg-purple-50 dark:bg-purple-950/50 text-purple-900 dark:text-purple-200 px-3 py-2 rounded-xl border border-purple-200 dark:border-purple-800/60">
+                Taxas de entrega no mês: <span className="font-black">{formatCurrency(activeMonthData.deliveryRevenue)}</span>
+              </div>
+            </div>
+
+            {/* Formas de Pagamento do Mês */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase block">
+                  💠 Pix (Chave/Manual)
+                </span>
+                <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+                  {formatCurrency(activeMonthData.byPayment.PIX.revenue)}
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeMonthData.byPayment.PIX.count} pedido(s)
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase block">
+                  💳 Mercado Pago Online
+                </span>
+                <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+                  {formatCurrency(activeMonthData.byPayment.MERCADO_PAGO.revenue)}
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeMonthData.byPayment.MERCADO_PAGO.count} pedido(s)
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase block">
+                  🏧 Cartão na Entrega
+                </span>
+                <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+                  {formatCurrency(activeMonthData.byPayment.CARTAO_ENTREGA.revenue)}
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeMonthData.byPayment.CARTAO_ENTREGA.count} pedido(s)
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase block">
+                  💵 Dinheiro
+                </span>
+                <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-1">
+                  {formatCurrency(activeMonthData.byPayment.DINHEIRO.revenue)}
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeMonthData.byPayment.DINHEIRO.count} pedido(s)
+                </span>
+              </div>
+            </div>
+
+            {/* Lista de Pedidos do Mês Selecionado */}
+            {activeMonthData.orders.length === 0 ? (
+              <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 text-xs font-bold">
+                Nenhum pedido registrado em {activeMonthData.monthName} de {selectedRevenueYear}.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Pedidos de {activeMonthData.monthName} ({activeMonthData.orders.length})
+                </h4>
+                <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                  {activeMonthData.orders.map(ord => (
+                    <div
+                      key={ord.id}
+                      className="p-3 sm:px-4 flex items-center justify-between gap-3 text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-slate-900 dark:text-white">{ord.id}</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{ord.customerName}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                            ord.status === 'CANCELADO'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                              : ord.status === 'CONCLUIDO'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                          }`}>
+                            {ord.status}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {formatDateTime(ord.createdAt)} • {ord.orderType === 'RETIRADA' ? 'Retirada' : 'Entrega'} • {ord.paymentMethod}
+                        </div>
+                      </div>
+                      <div className={`font-black text-sm shrink-0 ${
+                        ord.status === 'CANCELADO'
+                          ? 'line-through text-slate-400 dark:text-slate-600'
+                          : 'text-purple-950 dark:text-amber-400'
+                      }`}>
+                        {formatCurrency(ord.total)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: GESTÃO DE PEDIDOS */}
       {activeTab === 'PEDIDOS' && (

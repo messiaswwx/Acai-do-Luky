@@ -504,7 +504,7 @@ export async function fetchOrders(): Promise<Order[]> {
   try {
     const { data, error } = await supabase.rpc('rpc_admin_list_orders', {
       p_session_token: getAdminSessionToken(),
-      p_limit: 500
+      p_limit: 5000
     });
 
     if (isUnauthorizedResult(data, error)) {
