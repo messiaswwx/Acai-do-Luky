@@ -767,8 +767,8 @@ app.post('/api/orders/:id/confirm-payment', (req, res) => {
 // ROTAS OFICIAIS MERCADO PAGO (CHECKOUT PRO / REDIRECIONAMENTO DE TELA E APP)
 // ==============================================================================
 
-const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || 'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
-const MP_PUBLIC_KEY = process.env.MP_PUBLIC_KEY || 'APP_USR-c062df6b-9d26-44b3-aa96-3595444a6ef7';
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || '';
+const MP_PUBLIC_KEY = process.env.MP_PUBLIC_KEY || '';
 
 app.post('/api/mercadopago/create-preference', async (req, res) => {
   try {

@@ -1,17 +1,15 @@
 // Vercel Serverless Function: Webhook Oficial Mercado Pago
-const MP_ACCESS_TOKEN =
-  process.env.MP_ACCESS_TOKEN ||
-  'APP_USR-1227904041115821-102318-00a4c8bbdc1c3c078bb5c9d39b4069e0-2466476881';
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL ||
   process.env.SUPABASE_URL ||
-  'https://efwgevkgqeoenfpretrg.supabase.co';
+  '';
 
 const SUPABASE_ANON_KEY =
   process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmd2dldmtncWVvZW5mcHJldHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDA3NDIsImV4cCI6MjEwODExNjc0Mn0.sKHLJxnjctSwCZAwrOOZNrpfsum3NAxGbW3ek_luhC4';
+  '';
 
 async function fetchOfficialOrder(orderId) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !orderId) return null;
